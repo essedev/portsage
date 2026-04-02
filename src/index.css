@@ -1,19 +1,5 @@
 @import "tailwindcss";
 
-@font-face {
-  font-family: "Pixelify Sans";
-  src: url("/fonts/PixelifySans-Regular.ttf") format("truetype");
-  font-weight: 400;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Pixelify Sans";
-  src: url("/fonts/PixelifySans-SemiBold.ttf") format("truetype");
-  font-weight: 600;
-  font-display: swap;
-}
-
 @theme {
   /* Base */
   --color-bg-deep: #1a1a1f;
@@ -52,9 +38,9 @@
   --radius-lg: 12px;
 
   /* Fonts */
-  --font-pixel: "Pixelify Sans", monospace;
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-pixel: system-ui, sans-serif;
+  --font-sans: system-ui, sans-serif;
+  --font-mono: ui-monospace, monospace;
 }
 
 html, body {
@@ -73,4 +59,10 @@ html, body {
 
 button, [role="button"], a, input[type="submit"] {
   cursor: pointer;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
 }

@@ -4,7 +4,7 @@ import { GrimButton } from "@/components/ui/GrimButton";
 import { GrimInput } from "@/components/ui/GrimInput";
 import { GrimDivider } from "@/components/ui/GrimDivider";
 import { GrimBadge } from "@/components/ui/GrimBadge";
-import { CheckCircle, XCircle, Download, Upload, Trash2, Save, Power } from "lucide-react";
+import { CheckCircle, XCircle, Download, Upload, Trash2, Save } from "lucide-react";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import * as cmd from "@/lib/commands";
@@ -134,15 +134,28 @@ export function SettingsPanel() {
           Configurazione porte
         </GrimText>
 
-        <div className="flex items-center gap-[var(--spacing-3)]">
-          <GrimButton
-            variant={autostart ? "primary" : "ghost"}
+        <label className="inline-flex items-center gap-[var(--spacing-2)] cursor-pointer w-fit">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autostart}
             onClick={handleToggleAutostart}
+            className={`
+              relative inline-flex h-[18px] w-[32px] shrink-0 items-center
+              rounded-full transition-colors duration-200 cursor-pointer
+              ${autostart ? "bg-accent-amber" : "bg-status-inactive"}
+            `}
           >
-            <Power size={14} />
-            {autostart ? "Avvio automatico attivo" : "Avvio automatico"}
-          </GrimButton>
-        </div>
+            <span
+              className={`
+                inline-block h-[14px] w-[14px] rounded-full bg-white
+                transition-transform duration-200 shadow-sm
+                ${autostart ? "translate-x-[16px]" : "translate-x-[2px]"}
+              `}
+            />
+          </button>
+          <GrimText variant="body">Avvio automatico al login</GrimText>
+        </label>
 
         <GrimDivider />
 
