@@ -1,0 +1,25 @@
+[package]
+name = "grimport"
+version = "0.1.0"
+description = "Port allocation manager for macOS"
+authors = ["Simone Salerno"]
+edition = "2021"
+
+[lib]
+name = "grimport_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-autostart = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.34", features = ["bundled"] }
+dirs = "6"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "macros"] }

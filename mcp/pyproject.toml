@@ -1,0 +1,11 @@
+[project]
+name = "grimport-mcp"
+version = "0.1.0"
+description = "MCP server for Grimport - port allocation manager"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp[cli]>=1.0.0",
+]
+
+[project.scripts]
+grimport-mcp = "server:main"
