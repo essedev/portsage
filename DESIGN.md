@@ -39,7 +39,7 @@ Visual identity e component library per Grimport. Vibe: terminale di un mago - m
 
 ### Font
 
-- **Titoli e sezioni**: pixel medievale (candidati: Alagard, Pixelify Sans, Press Start 2P - da valutare in fase di implementazione, deve essere leggibile e non troppo pesante)
+- **Titoli e sezioni**: Pixelify Sans - pixel medievale leggibile, non troppo pesante
 - **UI e body**: `Inter` - pulito, ottima leggibilita' a tutte le dimensioni
 - **Dati tecnici** (porte, range, path): `JetBrains Mono` - monospace
 
@@ -47,8 +47,8 @@ Visual identity e component library per Grimport. Vibe: terminale di un mago - m
 
 | Token | Size | Weight | Font | Uso |
 |-------|------|--------|------|-----|
-| `--text-title` | 18px | 400 | Pixel medievale | "Grimport" nell'header |
-| `--text-section` | 13px | 400 | Pixel medievale | Nomi progetti, titoli sezione |
+| `--text-title` | 18px | 400 | Pixelify Sans | "Grimport" nell'header |
+| `--text-section` | 13px | 400 | Pixelify Sans | Nomi progetti, titoli sezione |
 | `--text-body` | 13px | 400 | Inter | Testo UI generale |
 | `--text-label` | 11px | 500 | Inter | Label, badge |
 | `--text-mono` | 12px | 400 | JetBrains Mono | Porte, range, path |
@@ -133,7 +133,7 @@ Componenti base riutilizzabili, senza logica di dominio.
 | `GrimButton` | Bottone. Varianti: `primary` (ambra), `ghost` (trasparente), `danger` (rosso) |
 | `GrimInput` | Campo input con sfondo bg-input, bordo subtle, focus con bordo ambra |
 | `GrimSearch` | Input con icona search, specifico per filtro |
-| `GrimTooltip` | Tooltip scuro con bordo subtle |
+| `GrimSelect` | Dropdown custom (no select nativo). Props: `options`, `value`, `onChange`. Chevron animato, lista con hover/selected states |
 | `GrimDivider` | Linea separatrice orizzontale, colore border-subtle |
 
 ### Composti (src/components/)
@@ -148,10 +148,11 @@ Componenti che combinano primitivi con logica di dominio.
 | `ProjectDetail` | Pannello dettaglio: info progetto + lista servizi + azioni |
 | `PopoverPanel` | Layout popover completo: header + ProjectList compatta + footer |
 | `Sidebar` | Sidebar finestra full: lista progetti compatta + search + bottone aggiungi |
-| `AppHeader` | Header con titolo "Grimport" (title font + glow) + indicatore porte attive |
-| `SettingsPanel` | Pannello settings: config, export/import |
-| `AddProjectForm` | Form aggiunta progetto: nome, path (con picker), conferma |
-| `AddPortForm` | Form aggiunta servizio/porta a un progetto |
+| `AppHeader` | Header con titolo "grimport" (title font + glow) + tagline + badge porte attive |
+| `SettingsPanel` | Pannello settings: autostart, config porte, integrazione Claude Code, export/import |
+| `UnmanagedPortsPanel` | Tabella porte attive non associate a progetti (porta, processo, PID) |
+| `AddProjectForm` | Form aggiunta progetto: nome, path, conferma |
+| `AddPortForm` | Form aggiunta servizio + dropdown porte libere nel range |
 
 ### Convenzioni componenti
 
