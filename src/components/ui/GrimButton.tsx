@@ -32,6 +32,7 @@ export function GrimButton({
         transition-colors duration-150
         cursor-pointer
         disabled:opacity-40 disabled:pointer-events-none
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
         ${variantClasses[variant]} ${className}
       `}
       {...props}

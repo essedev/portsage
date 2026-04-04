@@ -52,7 +52,7 @@ export function GrimSelect({
             bg-bg-input border border-border-subtle rounded-[var(--radius-sm)]
             px-[var(--spacing-2)] h-[30px]
             font-mono text-[12px] text-text-primary
-            focus:outline-none focus:border-accent-amber
+            focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
             transition-colors duration-150
             cursor-pointer
           "
@@ -89,6 +89,7 @@ export function GrimSelect({
                   w-full text-left px-[var(--spacing-2)] py-[var(--spacing-1)]
                   font-mono text-[12px] cursor-pointer
                   transition-colors duration-150
+                  focus:outline-none focus:bg-bg-elevated
                   ${option.value === value
                     ? "text-accent-amber bg-accent-amber-soft"
                     : "text-text-primary hover:bg-bg-elevated"

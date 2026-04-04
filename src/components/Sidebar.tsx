@@ -80,7 +80,7 @@ export function Sidebar({
         </>
       )}
 
-      <nav className="flex-1 overflow-y-auto px-[var(--spacing-2)] pb-[var(--spacing-2)]">
+      <nav className="flex-1 overflow-y-auto px-[var(--spacing-2)] pt-[var(--spacing-2)] pb-[var(--spacing-2)]">
         {filtered.map((project) => {
           const active = project.ports.filter((p) => p.active).length;
           const isSelected = project.id === selectedId && activeView === "project";
@@ -94,6 +94,7 @@ export function Sidebar({
                 px-[var(--spacing-2)] py-[var(--spacing-2)]
                 rounded-[var(--radius-sm)]
                 text-left cursor-pointer transition-colors duration-150
+                focus-visible:outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
                 ${isSelected
                   ? "bg-bg-elevated border border-accent-amber/30"
                   : "border border-transparent hover:bg-bg-elevated"
@@ -123,6 +124,7 @@ export function Sidebar({
                 px-[var(--spacing-2)] py-[var(--spacing-2)]
                 rounded-[var(--radius-sm)]
                 text-left cursor-pointer transition-colors duration-150
+                focus-visible:outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
                 ${activeView === "unmanaged"
                   ? "bg-bg-elevated border border-accent-amber/30"
                   : "border border-transparent hover:bg-bg-elevated"

@@ -80,7 +80,7 @@ Le porte non gestite sono filtrate: solo porte >= 3000, esclusi processi di sist
 - **MCP server**: Python + FastMCP SDK (thin client via stdio)
 - **Package manager**: pnpm (frontend), uv (Python)
 - **Database**: SQLite in `~/.config/grimport/`
-- **Font**: Pixelify Sans (titoli), Inter (UI), JetBrains Mono (dati tecnici)
+- **Font**: system-ui (UI), ui-monospace (titoli e dati tecnici)
 
 ## Distribuzione
 

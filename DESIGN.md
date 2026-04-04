@@ -39,16 +39,16 @@ Visual identity e component library per Grimport. Vibe: terminale di un mago - m
 
 ### Font
 
-- **Titoli e sezioni**: Pixelify Sans - pixel medievale leggibile, non troppo pesante
-- **UI e body**: `Inter` - pulito, ottima leggibilita' a tutte le dimensioni
-- **Dati tecnici** (porte, range, path): `JetBrains Mono` - monospace
+- **Titoli e sezioni**: `ui-monospace` (monospace di sistema) - coerente con il vibe terminale
+- **UI e body**: `system-ui` (sans-serif di sistema) - pulito, ottima leggibilita'
+- **Dati tecnici** (porte, range, path): `ui-monospace` (monospace di sistema)
 
 ### Scale
 
 | Token | Size | Weight | Font | Uso |
 |-------|------|--------|------|-----|
-| `--text-title` | 18px | 400 | Pixelify Sans | "Grimport" nell'header |
-| `--text-section` | 13px | 400 | Pixelify Sans | Nomi progetti, titoli sezione |
+| `--text-title` | 18px | 400 | ui-monospace | "Grimport" nell'header |
+| `--text-section` | 13px | 400 | ui-monospace | Nomi progetti, titoli sezione |
 | `--text-body` | 13px | 400 | Inter | Testo UI generale |
 | `--text-label` | 11px | 500 | Inter | Label, badge |
 | `--text-mono` | 12px | 400 | JetBrains Mono | Porte, range, path |

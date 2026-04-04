@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Grimport",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "identifier": "com.doppia.grimport",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -18,8 +18,10 @@
         "height": 600,
         "minWidth": 700,
         "minHeight": 400,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "titleBarStyle": "Transparent",
+        "hiddenTitle": true,
+        "transparent": true,
+        "backgroundColor": "#222228"
       },
       {
         "label": "popover",

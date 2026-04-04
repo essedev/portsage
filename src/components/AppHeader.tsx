@@ -14,30 +14,28 @@ export function AppHeader({ projects }: AppHeaderProps) {
   return (
     <header
       className="
-        flex flex-col
+        flex items-center justify-between
         bg-bg-surface border-b border-border-subtle
+        px-[var(--spacing-3)] h-10
       "
       data-tauri-drag-region
     >
-      <div className="h-8 w-full" data-tauri-drag-region />
-      <div className="flex items-center justify-between px-[var(--spacing-3)] pb-[var(--spacing-2)]">
-        <div className="flex items-baseline gap-[var(--spacing-2)]">
-          <GrimText
-            variant="title"
-            as="h1"
-            className="select-none"
-            style={{ textShadow: "0 0 12px var(--color-accent-amber-glow)" }}
-          >
-            grimport
-          </GrimText>
-          <GrimText variant="label" className="text-text-muted select-none">
-            your port grimoire
-          </GrimText>
-        </div>
-        {totalActive > 0 && (
-          <GrimBadge variant="active">{totalActive} attive</GrimBadge>
-        )}
+      <div className="flex items-baseline gap-[var(--spacing-2)]">
+        <GrimText
+          variant="title"
+          as="h1"
+          className="select-none -mt-1"
+          style={{ textShadow: "0 0 12px var(--color-accent-amber-glow)" }}
+        >
+          grimport
+        </GrimText>
+        <GrimText variant="label" className="text-text-muted select-none">
+          your port grimoire
+        </GrimText>
       </div>
+      {totalActive > 0 && (
+        <GrimBadge variant="active">{totalActive} attive</GrimBadge>
+      )}
     </header>
   );
 }

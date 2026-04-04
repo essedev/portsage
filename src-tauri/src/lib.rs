@@ -11,7 +11,11 @@ use tauri::{
     tray::MouseButton,
     tray::MouseButtonState,
     PhysicalPosition,
+    RunEvent, WindowEvent,
 };
+
+#[cfg(target_os = "macos")]
+use tauri::ActivationPolicy;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -20,7 +24,7 @@ pub fn run() {
     // Start Unix socket server for MCP
     socket::start_socket_server(database.clone());
 
-    tauri::Builder::default()
+    let mut app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
@@ -44,6 +48,7 @@ pub fn run() {
             commands::export_data,
             commands::import_data,
             commands::show_main_window,
+            commands::quit_app,
             commands::check_mcp_installed,
             commands::install_mcp,
             commands::uninstall_mcp,
@@ -93,6 +98,28 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // Start as accessory (no dock icon, just status bar)
+    #[cfg(target_os = "macos")]
+    app.set_activation_policy(ActivationPolicy::Accessory);
+
+    app.run(|app_handle: &tauri::AppHandle, event: RunEvent| {
+        if let RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::CloseRequested { api, .. },
+            ..
+        } = &event
+        {
+            if label == "main" {
+                api.prevent_close();
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+                #[cfg(target_os = "macos")]
+                let _ = app_handle.set_activation_policy(ActivationPolicy::Accessory);
+            }
+        }
+    });
 }

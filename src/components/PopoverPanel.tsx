@@ -18,6 +18,10 @@ export function PopoverPanel() {
     invoke("show_main_window");
   };
 
+  const quit = () => {
+    invoke("quit_app");
+  };
+
   return (
     <div className="flex flex-col h-screen bg-bg-surface rounded-[var(--radius-lg)] overflow-hidden">
       <header
@@ -87,6 +91,9 @@ export function PopoverPanel() {
       <GrimDivider />
 
       <footer className="flex items-center justify-between px-[var(--spacing-4)] h-10 shrink-0">
+        <GrimButton variant="ghost" className="text-[12px]!" onClick={quit}>
+          Esci
+        </GrimButton>
         <GrimText variant="label">
           {totalActive}/{totalPorts} porte attive
         </GrimText>

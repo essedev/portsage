@@ -64,7 +64,7 @@ homebrew/
 - Dipendenza unidirezionale: primitivi <- composti. I `Grim*` non importano composti
 - Props tipizzate con interface nello stesso file del componente
 - Tailwind v4: CSS-first config con @theme, niente tailwind.config.ts
-- Font Pixelify Sans solo per varianti title e section di GrimText
+- Font: system-ui (UI), ui-monospace (titoli/dati tecnici)
 - Import alias: `@/` per import assoluti
 - Dropdown custom (GrimSelect), mai select nativo
 

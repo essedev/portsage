@@ -142,8 +142,9 @@ export function SettingsPanel() {
             onClick={handleToggleAutostart}
             className={`
               relative inline-flex h-[18px] w-[32px] shrink-0 items-center
-              rounded-full transition-colors duration-200 cursor-pointer
+              rounded-full border border-transparent transition-colors duration-200 cursor-pointer
               ${autostart ? "bg-accent-amber" : "bg-status-inactive"}
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber focus-visible:ring-offset-2 focus-visible:ring-offset-bg-deep
             `}
           >
             <span

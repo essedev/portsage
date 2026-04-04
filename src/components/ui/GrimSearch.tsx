@@ -17,7 +17,7 @@ export function GrimSearch({ className = "", ...props }: GrimSearchProps) {
           pl-[var(--spacing-8)] pr-[var(--spacing-2)] py-[var(--spacing-1)]
           font-sans text-[13px] text-text-primary
           placeholder:text-text-muted
-          focus:outline-none focus:border-accent-amber
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
           transition-colors duration-150
         "
         placeholder="Cerca..."
