@@ -8,4 +8,9 @@ cask "grimport" do
   homepage "https://github.com/essedev/grimport"
 
   app "Grimport.app"
+
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-cr", "#{appdir}/Grimport.app"]
+  end
 end
