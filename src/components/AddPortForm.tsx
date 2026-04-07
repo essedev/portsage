@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { GrimInput } from "@/components/ui/GrimInput";
-import { GrimSelect } from "@/components/ui/GrimSelect";
-import { GrimButton } from "@/components/ui/GrimButton";
-import { GrimText } from "@/components/ui/GrimText";
+import { UIInput } from "@/components/ui/UIInput";
+import { UISelect } from "@/components/ui/UISelect";
+import { UIButton } from "@/components/ui/UIButton";
+import { UIText } from "@/components/ui/UIText";
 
 interface AddPortFormProps {
   rangeStart: number;
@@ -38,9 +38,9 @@ export function AddPortForm({
   if (availablePorts.length === 0) {
     return (
       <div className="bg-bg-elevated rounded-[var(--radius-md)] p-[var(--spacing-3)]">
-        <GrimText variant="body" className="text-text-muted">
+        <UIText variant="body" className="text-text-muted">
           All ports in the range are taken
-        </GrimText>
+        </UIText>
       </div>
     );
   }
@@ -51,7 +51,7 @@ export function AddPortForm({
       className="flex flex-col gap-[var(--spacing-2)] bg-bg-elevated rounded-[var(--radius-md)] p-[var(--spacing-3)]"
     >
       <div className="flex gap-[var(--spacing-2)] items-end">
-        <GrimInput
+        <UIInput
           label="Service"
           placeholder="e.g. vite, postgres"
           value={service}
@@ -59,7 +59,7 @@ export function AddPortForm({
           wrapperClassName="w-48"
           autoFocus
         />
-        <GrimSelect
+        <UISelect
           label="Port"
           value={port}
           onChange={setPort}
@@ -71,16 +71,16 @@ export function AddPortForm({
         />
       </div>
       <div className="flex justify-end gap-[var(--spacing-2)]">
-        <GrimButton variant="ghost" type="button" onClick={onCancel}>
+        <UIButton variant="ghost" type="button" onClick={onCancel}>
           Cancel
-        </GrimButton>
-        <GrimButton
+        </UIButton>
+        <UIButton
           variant="primary"
           type="submit"
           disabled={!service.trim()}
         >
           Add
-        </GrimButton>
+        </UIButton>
       </div>
     </form>
   );

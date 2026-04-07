@@ -15,6 +15,22 @@ cd mcp && uv sync && cd ..    # install MCP dependencies
 pnpm tauri dev                # start the app in dev mode (hot reload)
 ```
 
+## Tests
+
+Run both suites before tagging a release. They are fast (single-digit seconds total) and have no external dependencies.
+
+```bash
+# Rust backend (db, scanner, socket protocol, commands, race regression)
+cd src-tauri && cargo test
+
+# TypeScript frontend (humanizeError pattern table)
+pnpm test
+```
+
+Layout:
+- Rust tests live inline in each module under `#[cfg(test)] mod tests`. There is no separate `tests/` tree.
+- TypeScript tests live next to the source as `*.test.ts` and run via `vitest`.
+
 ## Build
 
 ```bash

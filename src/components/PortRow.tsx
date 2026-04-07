@@ -1,7 +1,7 @@
 import { Trash2 } from "lucide-react";
-import { GrimStatus } from "@/components/ui/GrimStatus";
-import { GrimText } from "@/components/ui/GrimText";
-import { GrimButton } from "@/components/ui/GrimButton";
+import { UIStatus } from "@/components/ui/UIStatus";
+import { UIText } from "@/components/ui/UIText";
+import { UIButton } from "@/components/ui/UIButton";
 import type { PortStatus } from "@/lib/types";
 
 interface PortRowProps {
@@ -12,26 +12,26 @@ interface PortRowProps {
 export function PortRow({ port, onRemove }: PortRowProps) {
   return (
     <div className="flex items-center gap-[var(--spacing-2)] h-8 group">
-      <GrimStatus active={port.active} />
-      <GrimText variant="body" className="flex-1 truncate">
+      <UIStatus active={port.active} />
+      <UIText variant="body" className="flex-1 truncate">
         {port.service}
-      </GrimText>
+      </UIText>
       {port.active && port.process && (
-        <GrimText variant="mono" className="text-text-muted text-[10px]! truncate max-w-32">
+        <UIText variant="mono" className="text-text-muted text-[10px]! truncate max-w-32">
           {port.process}
-        </GrimText>
+        </UIText>
       )}
-      <GrimText variant="mono" className="tabular-nums">
+      <UIText variant="mono" className="tabular-nums">
         {port.port}
-      </GrimText>
+      </UIText>
       {onRemove && (
-        <GrimButton
+        <UIButton
           variant="danger"
           className="opacity-0 group-hover:opacity-100 p-1"
           onClick={() => onRemove(port.id)}
         >
           <Trash2 size={14} />
-        </GrimButton>
+        </UIButton>
       )}
     </div>
   );

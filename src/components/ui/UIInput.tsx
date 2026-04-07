@@ -1,16 +1,16 @@
 import { type InputHTMLAttributes } from "react";
 
-interface GrimInputProps extends InputHTMLAttributes<HTMLInputElement> {
+interface UIInputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   wrapperClassName?: string;
 }
 
-export function GrimInput({
+export function UIInput({
   label,
   className = "",
   wrapperClassName = "",
   ...props
-}: GrimInputProps) {
+}: UIInputProps) {
   return (
     <div className={`flex flex-col gap-[var(--spacing-1)] ${wrapperClassName}`}>
       {label && (

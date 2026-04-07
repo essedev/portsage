@@ -40,6 +40,13 @@ cd mcp && uv sync && cd ..    # MCP dependencies
 pnpm tauri dev                # dev mode (hot reload)
 ```
 
+### Tests
+
+```bash
+cd src-tauri && cargo test    # Rust backend (db, scanner, socket, commands)
+pnpm test                     # TypeScript frontend (vitest)
+```
+
 ## MCP integration
 
 The MCP server exposes 5 tools:

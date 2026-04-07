@@ -150,6 +150,15 @@ Errors that can be returned: `invalid json: ...`, `unknown method: ...`, `missin
 
 The Python MCP server (`mcp/server.py`) is the reference client. Any other language can integrate by speaking this protocol directly.
 
+## Testing strategy
+
+Tests cover the **domain core** - port allocation, lsof parsing, socket protocol, error humanization - and the **safety-critical helpers** (e.g. parse-or-bail before merging into the user's editor config). They do not cover thin wrappers, framework plumbing, or UI rendering.
+
+- Rust tests live inline in each module under `#[cfg(test)] mod tests` and use in-memory SQLite. Run with `cd src-tauri && cargo test`.
+- Frontend tests live next to the source as `*.test.ts` and run via vitest. Run with `pnpm test`.
+
+The race-condition fix in `Database::create_project` has a dedicated regression test (`concurrent_create_project_produces_no_overlapping_ranges`) that spawns N threads and asserts non-overlapping ranges - it would have failed on the pre-fix code.
+
 ## UI
 
 ### Menubar popover (quick view)

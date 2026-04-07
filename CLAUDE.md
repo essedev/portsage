@@ -10,13 +10,16 @@ A macOS menubar app for managing port allocation across projects. See PROJECT.md
 - `pnpm dev` - frontend only (Vite)
 - `pnpm build` - build the frontend
 - `pnpm tauri build` - build the full app (.dmg)
+- `pnpm test` - run TypeScript tests (vitest, one-shot)
+- `pnpm test:watch` - vitest watch mode
+- `cd src-tauri && cargo test` - run Rust tests
 
 ## Structure
 
 ```
 src/
   components/
-    ui/               # Primitives (GrimCard, GrimButton, GrimSelect, etc.)
+    ui/               # Primitives (UICard, UIButton, UISelect, etc.)
     PortRow.tsx
     ProjectCard.tsx
     ProjectDetail.tsx
@@ -60,13 +63,13 @@ homebrew/
 ### Frontend
 - All colors via the CSS tokens defined in DESIGN.md, never hardcoded
 - Spacing only via the --space-N tokens, border-radius via --radius-*
-- `Grim*` components in `src/components/ui/`, composed in `src/components/`
-- One-way dependency: primitives <- composed. `Grim*` never imports composed
+- `UI*` components in `src/components/ui/`, composed in `src/components/`
+- One-way dependency: primitives <- composed. `UI*` never imports composed
 - Props typed with an interface in the same component file
 - Tailwind v4: CSS-first config with @theme, no tailwind.config.ts
 - Font: system-ui (UI), ui-monospace (titles/technical data)
 - Import alias: `@/` for absolute imports
-- Custom dropdown (GrimSelect), never the native select
+- Custom dropdown (UISelect), never the native select
 
 ### Rust backend
 - All DB access in db.rs, exposed to the frontend via commands.rs
@@ -79,6 +82,14 @@ homebrew/
 - Thin client: no direct DB access
 - Talks only via the Unix socket to the Rust backend
 - stdio transport for Claude Code integration
+
+### Testing
+- Rust tests live inline in each module under `#[cfg(test)] mod tests` - no separate `tests/` tree
+- Frontend tests live next to the source as `*.test.ts` and run via vitest
+- Both `cargo test` and `pnpm test` must pass before committing or releasing
+- Cover behavioral invariants and pure functions, not framework plumbing or thin wrappers - if a test would only verify "framework still works", skip it
+- Use in-memory SQLite (`Database::in_memory()`) for db tests, never touch the real config dir
+- For race/concurrency fixes, add a regression test that would fail without the fix (see `db.rs::concurrent_create_project_produces_no_overlapping_ranges`)
 
 ### General
 - Code in English, UI in English (Italian translation tracked separately)

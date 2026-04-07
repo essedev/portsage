@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { Plus, Settings, Plug, AlertTriangle } from "lucide-react";
-import { GrimSearch } from "@/components/ui/GrimSearch";
-import { GrimButton } from "@/components/ui/GrimButton";
-import { GrimText } from "@/components/ui/GrimText";
-import { GrimBadge } from "@/components/ui/GrimBadge";
-import { GrimDivider } from "@/components/ui/GrimDivider";
+import { UISearch } from "@/components/ui/UISearch";
+import { UIButton } from "@/components/ui/UIButton";
+import { UIText } from "@/components/ui/UIText";
+import { UIBadge } from "@/components/ui/UIBadge";
+import { UIDivider } from "@/components/ui/UIDivider";
 import { AddProjectForm } from "@/components/AddProjectForm";
 import * as cmd from "@/lib/commands";
 import type { ProjectStatus, UnmanagedPort } from "@/lib/types";
@@ -52,23 +52,23 @@ export function Sidebar({
       "
     >
       <div className="p-[var(--spacing-3)] flex flex-col gap-[var(--spacing-2)]">
-        <GrimSearch
+        <UISearch
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <GrimButton
+        <UIButton
           variant="ghost"
           className="w-full justify-start"
           onClick={() => setShowAdd(!showAdd)}
         >
           <Plus size={16} />
           New project
-        </GrimButton>
+        </UIButton>
       </div>
 
       {showAdd && (
         <>
-          <GrimDivider />
+          <UIDivider />
           <AddProjectForm
             onSubmit={(name, path) => {
               onCreate(name, path);
@@ -76,7 +76,7 @@ export function Sidebar({
             }}
             onCancel={() => setShowAdd(false)}
           />
-          <GrimDivider />
+          <UIDivider />
         </>
       )}
 
@@ -101,14 +101,14 @@ export function Sidebar({
                 }
               `}
             >
-              <GrimText
+              <UIText
                 variant="section"
                 className={`truncate text-[12px] ${isSelected ? "" : "text-text-secondary!"}`}
               >
                 {project.name}
-              </GrimText>
+              </UIText>
               {active > 0 && (
-                <GrimBadge variant="active">{active}</GrimBadge>
+                <UIBadge variant="active">{active}</UIBadge>
               )}
             </button>
           );
@@ -116,7 +116,7 @@ export function Sidebar({
 
         {unmanagedPorts.length > 0 && (
           <>
-            <GrimDivider className="my-[var(--spacing-2)]" />
+            <UIDivider className="my-[var(--spacing-2)]" />
             <button
               onClick={onShowUnmanaged}
               className={`
@@ -133,14 +133,14 @@ export function Sidebar({
             >
               <div className="flex items-center gap-[var(--spacing-1)]">
                 <AlertTriangle size={12} className="text-accent-amber" />
-                <GrimText
+                <UIText
                   variant="body"
                   className={`text-[12px] ${activeView === "unmanaged" ? "text-accent-amber!" : "text-text-secondary!"}`}
                 >
                   Unmanaged
-                </GrimText>
+                </UIText>
               </div>
-              <GrimBadge variant="inactive">{unmanagedPorts.length}</GrimBadge>
+              <UIBadge variant="inactive">{unmanagedPorts.length}</UIBadge>
             </button>
           </>
         )}
@@ -148,23 +148,23 @@ export function Sidebar({
 
       <div className="flex flex-col gap-[var(--spacing-1)] p-[var(--spacing-2)]">
         {!mcpInstalled && (
-          <GrimButton
+          <UIButton
             variant="primary"
             className="w-full justify-start text-[12px]!"
             onClick={onShowSettings}
           >
             <Plug size={14} />
             Configure MCP
-          </GrimButton>
+          </UIButton>
         )}
-        <GrimButton
+        <UIButton
           variant="ghost"
           className={`w-full justify-start text-[12px]! ${activeView === "settings" ? "bg-bg-elevated" : ""}`}
           onClick={onShowSettings}
         >
           <Settings size={14} />
           Settings
-        </GrimButton>
+        </UIButton>
       </div>
     </aside>
   );

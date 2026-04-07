@@ -2,7 +2,7 @@ import { type ReactNode, type ButtonHTMLAttributes } from "react";
 
 type ButtonVariant = "primary" | "ghost" | "danger";
 
-interface GrimButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface UIButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   children: ReactNode;
 }
@@ -16,12 +16,12 @@ const variantClasses: Record<ButtonVariant, string> = {
     "bg-transparent text-accent-danger hover:bg-accent-danger-soft border-transparent",
 };
 
-export function GrimButton({
+export function UIButton({
   variant = "ghost",
   children,
   className = "",
   ...props
-}: GrimButtonProps) {
+}: UIButtonProps) {
   return (
     <button
       className={`

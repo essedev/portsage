@@ -2,8 +2,30 @@ use crate::db::{Database, ProjectWithPorts};
 use crate::scanner::{self, scan_active_ports, ActivePort};
 use serde::Serialize;
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Arc;
 use tauri::{Manager, State};
+
+/// Read and parse a JSON file at `path`. If the file does not exist, returns
+/// an empty object. If the file exists but is malformed, returns Err with a
+/// clear "refusing to overwrite" message. This is the **safety-critical**
+/// helper used by `install_mcp` before merging into the user's `~/.claude.json`
+/// and `~/.claude/settings.json`: falling back to `{}` on parse failure would
+/// silently destroy the user's entire editor config.
+fn parse_existing_or_empty(path: &Path) -> Result<serde_json::Value, String> {
+    if !path.exists() {
+        return Ok(serde_json::json!({}));
+    }
+    let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| {
+        format!(
+            "{} appears to be corrupt and cannot be parsed: {}. Refusing to overwrite. \
+             Fix or back up the file manually before retrying.",
+            path.display(),
+            e
+        )
+    })
+}
 
 #[derive(Debug, Serialize)]
 pub struct PortStatus {
@@ -328,23 +350,8 @@ pub fn install_mcp(mcp_dir: String) -> Result<(), String> {
     let mcp_dir = std::path::PathBuf::from(&mcp_dir);
 
     // 1. Write MCP server config to ~/.claude.json
-    // If the file already exists we MUST be able to parse it. Falling back to {} on parse
-    // failure would silently destroy the user's entire Claude config (other MCP servers,
-    // settings, history, etc.) so we bail with a clear error instead.
     let claude_json_path = home.join(".claude.json");
-    let mut claude_json: serde_json::Value = if claude_json_path.exists() {
-        let content = std::fs::read_to_string(&claude_json_path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&content).map_err(|e| {
-            format!(
-                "{} appears to be corrupt and cannot be parsed: {}. Refusing to overwrite. \
-                 Fix or back up the file manually before retrying.",
-                claude_json_path.display(),
-                e
-            )
-        })?
-    } else {
-        serde_json::json!({})
-    };
+    let mut claude_json = parse_existing_or_empty(&claude_json_path)?;
 
     let mcp_dir_str = mcp_dir.to_string_lossy().to_string();
     claude_json["mcpServers"]["portsage"] = serde_json::json!({
@@ -369,19 +376,7 @@ pub fn install_mcp(mcp_dir: String) -> Result<(), String> {
 
     // 3. Add tool permissions to ~/.claude/settings.json (same parse-or-bail policy as above)
     let settings_path = home.join(".claude").join("settings.json");
-    let mut settings: serde_json::Value = if settings_path.exists() {
-        let content = std::fs::read_to_string(&settings_path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&content).map_err(|e| {
-            format!(
-                "{} appears to be corrupt and cannot be parsed: {}. Refusing to overwrite. \
-                 Fix or back up the file manually before retrying.",
-                settings_path.display(),
-                e
-            )
-        })?
-    } else {
-        serde_json::json!({})
-    };
+    let mut settings = parse_existing_or_empty(&settings_path)?;
 
     let tools = vec![
         "mcp__portsage__list_all",
@@ -464,4 +459,182 @@ pub fn uninstall_mcp() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{Port, Project, ProjectWithPorts};
+
+    fn project(id: i64, name: &str, range: (i64, i64)) -> Project {
+        Project {
+            id,
+            name: name.into(),
+            path: None,
+            range_start: range.0,
+            range_end: range.1,
+            created_at: "now".into(),
+        }
+    }
+
+    fn port(id: i64, project_id: i64, service: &str, port: i64) -> Port {
+        Port {
+            id,
+            project_id,
+            service: service.into(),
+            port,
+            created_at: "now".into(),
+        }
+    }
+
+    fn active(port: i64, process: &str) -> ActivePort {
+        ActivePort {
+            port,
+            process: process.into(),
+            pid: 999,
+        }
+    }
+
+    #[test]
+    fn enrich_marks_active_ports_and_attaches_process_name() {
+        let projects = vec![ProjectWithPorts {
+            project: project(1, "alpha", (4000, 4009)),
+            ports: vec![port(10, 1, "vite", 4000), port(11, 1, "api", 4001)],
+        }];
+        // 4000 is active as "node", 4001 is not in the active list.
+        let active_list = vec![active(4000, "node")];
+
+        let result = enrich_with_status(projects, &active_list);
+
+        assert_eq!(result.len(), 1);
+        let p = &result[0];
+        assert_eq!(p.name, "alpha");
+        assert_eq!(p.ports.len(), 2);
+
+        let vite = p.ports.iter().find(|p| p.service == "vite").unwrap();
+        assert!(vite.active);
+        assert_eq!(vite.process.as_deref(), Some("node"));
+
+        let api = p.ports.iter().find(|p| p.service == "api").unwrap();
+        assert!(!api.active);
+        assert!(api.process.is_none());
+    }
+
+    #[test]
+    fn enrich_with_no_active_ports_marks_everything_inactive() {
+        let projects = vec![ProjectWithPorts {
+            project: project(1, "alpha", (4000, 4009)),
+            ports: vec![port(10, 1, "vite", 4000)],
+        }];
+        let result = enrich_with_status(projects, &[]);
+        assert!(!result[0].ports[0].active);
+        assert!(result[0].ports[0].process.is_none());
+    }
+
+    #[test]
+    fn enrich_active_port_outside_any_project_is_ignored() {
+        // 9999 is active but not registered to any project. enrich_with_status
+        // only annotates registered ports - unmanaged ports go through a
+        // different code path - so this should not affect the result.
+        let projects = vec![ProjectWithPorts {
+            project: project(1, "alpha", (4000, 4009)),
+            ports: vec![port(10, 1, "vite", 4000)],
+        }];
+        let active_list = vec![active(9999, "node")];
+
+        let result = enrich_with_status(projects, &active_list);
+        assert_eq!(result[0].ports.len(), 1);
+        assert!(!result[0].ports[0].active);
+    }
+
+    // --- parse_existing_or_empty ---
+
+    #[test]
+    fn parse_existing_or_empty_returns_empty_object_when_file_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("missing.json");
+        let result = parse_existing_or_empty(&path).unwrap();
+        assert_eq!(result, serde_json::json!({}));
+    }
+
+    #[test]
+    fn parse_existing_or_empty_parses_valid_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, r#"{"mcpServers": {"foo": {"command": "bar"}}}"#).unwrap();
+        let result = parse_existing_or_empty(&path).unwrap();
+        assert_eq!(result["mcpServers"]["foo"]["command"], "bar");
+    }
+
+    #[test]
+    fn parse_existing_or_empty_bails_on_malformed_json() {
+        // This is the safety-critical case: if the user's claude.json is broken,
+        // we MUST refuse to overwrite it - falling back to {} would destroy
+        // all their other MCP servers and editor settings.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("broken.json");
+        std::fs::write(&path, "{ this is not valid json").unwrap();
+        let err = parse_existing_or_empty(&path).unwrap_err();
+        assert!(
+            err.contains("appears to be corrupt"),
+            "expected 'corrupt' message, got: {err}",
+        );
+        assert!(
+            err.contains("Refusing to overwrite"),
+            "expected refusal message, got: {err}",
+        );
+        assert!(
+            err.contains(&path.display().to_string()),
+            "expected the path to be mentioned in the error, got: {err}",
+        );
+    }
+
+    #[test]
+    fn parse_existing_or_empty_handles_empty_file_as_corrupt() {
+        // An empty file is not valid JSON. It must be treated as corrupt
+        // (refusal), not silently turned into {}.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.json");
+        std::fs::write(&path, "").unwrap();
+        let err = parse_existing_or_empty(&path).unwrap_err();
+        assert!(err.contains("appears to be corrupt"));
+    }
+
+    #[test]
+    fn parse_existing_or_empty_accepts_empty_object() {
+        // {} on disk is valid and should round-trip.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty-obj.json");
+        std::fs::write(&path, "{}").unwrap();
+        let result = parse_existing_or_empty(&path).unwrap();
+        assert_eq!(result, serde_json::json!({}));
+    }
+
+    #[test]
+    fn enrich_preserves_project_order_and_metadata() {
+        let projects = vec![
+            ProjectWithPorts {
+                project: Project {
+                    id: 1,
+                    name: "alpha".into(),
+                    path: Some("/tmp/alpha".into()),
+                    range_start: 4000,
+                    range_end: 4009,
+                    created_at: "t1".into(),
+                },
+                ports: vec![],
+            },
+            ProjectWithPorts {
+                project: project(2, "bravo", (4010, 4019)),
+                ports: vec![],
+            },
+        ];
+        let result = enrich_with_status(projects, &[]);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].name, "alpha");
+        assert_eq!(result[0].path.as_deref(), Some("/tmp/alpha"));
+        assert_eq!(result[0].range_start, 4000);
+        assert_eq!(result[0].range_end, 4009);
+        assert_eq!(result[1].name, "bravo");
+    }
 }

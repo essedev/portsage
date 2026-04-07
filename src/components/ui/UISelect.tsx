@@ -1,26 +1,26 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 
-interface GrimSelectOption {
+interface UISelectOption {
   value: string;
   label: string;
 }
 
-interface GrimSelectProps {
+interface UISelectProps {
   label?: string;
-  options: GrimSelectOption[];
+  options: UISelectOption[];
   value: string;
   onChange: (value: string) => void;
   className?: string;
 }
 
-export function GrimSelect({
+export function UISelect({
   label,
   options,
   value,
   onChange,
   className = "",
-}: GrimSelectProps) {
+}: UISelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Trash2, FolderOpen, Terminal, Plus } from "lucide-react";
-import { GrimText } from "@/components/ui/GrimText";
-import { GrimButton } from "@/components/ui/GrimButton";
-import { GrimDivider } from "@/components/ui/GrimDivider";
-import { GrimBadge } from "@/components/ui/GrimBadge";
+import { useConfirm } from "@/lib/dialog";
+import { UIText } from "@/components/ui/UIText";
+import { UIButton } from "@/components/ui/UIButton";
+import { UIDivider } from "@/components/ui/UIDivider";
+import { UIBadge } from "@/components/ui/UIBadge";
 import { PortRow } from "@/components/PortRow";
 import { AddPortForm } from "@/components/AddPortForm";
 import * as cmd from "@/lib/commands";
@@ -23,70 +24,87 @@ export function ProjectDetail({
   onRemovePort,
 }: ProjectDetailProps) {
   const [showAddPort, setShowAddPort] = useState(false);
+  const confirm = useConfirm();
   const activePorts = project.ports.filter((p) => p.active).length;
+
+  const handleDelete = async () => {
+    const portsCount = project.ports.length;
+    const message =
+      portsCount > 0
+        ? `Delete project "${project.name}" and its ${portsCount} registered port${portsCount === 1 ? "" : "s"}? This cannot be undone.`
+        : `Delete project "${project.name}"? This cannot be undone.`;
+    const ok = await confirm({
+      title: "Delete project",
+      message,
+      kind: "warning",
+      okLabel: "Delete",
+      cancelLabel: "Cancel",
+    });
+    if (ok) onDelete(project.id);
+  };
 
   return (
     <div className="flex flex-col gap-[var(--spacing-4)] p-[var(--spacing-5)]">
       <div className="flex items-start justify-between">
         <div className="flex flex-col gap-[var(--spacing-1)]">
-          <GrimText variant="title" as="h2">
+          <UIText variant="title" as="h2">
             {project.name}
-          </GrimText>
+          </UIText>
           {project.path && (
-            <GrimText variant="mono" className="text-text-secondary text-[11px]">
+            <UIText variant="mono" className="text-text-secondary text-[11px]">
               {project.path}
-            </GrimText>
+            </UIText>
           )}
         </div>
         <div className="flex items-center gap-[var(--spacing-1)]">
           {project.path && (
             <>
-              <GrimButton
+              <UIButton
                 variant="ghost"
                 title="Open in Finder"
                 onClick={() => cmd.openInFinder(project.path!)}
               >
                 <FolderOpen size={16} />
-              </GrimButton>
-              <GrimButton
+              </UIButton>
+              <UIButton
                 variant="ghost"
                 title="Open in Terminal"
                 onClick={() => cmd.openInTerminal(project.path!)}
               >
                 <Terminal size={16} />
-              </GrimButton>
+              </UIButton>
             </>
           )}
-          <GrimButton
+          <UIButton
             variant="danger"
-            onClick={() => onDelete(project.id)}
+            onClick={handleDelete}
             title="Remove project"
           >
             <Trash2 size={16} />
-          </GrimButton>
+          </UIButton>
         </div>
       </div>
 
       <div className="flex items-center gap-[var(--spacing-3)]">
-        <GrimText variant="mono">
+        <UIText variant="mono">
           Range: {project.range_start}-{project.range_end}
-        </GrimText>
-        <GrimBadge variant={activePorts > 0 ? "active" : "inactive"}>
+        </UIText>
+        <UIBadge variant={activePorts > 0 ? "active" : "inactive"}>
           {activePorts} active of {project.ports.length}
-        </GrimBadge>
+        </UIBadge>
       </div>
 
-      <GrimDivider />
+      <UIDivider />
 
       <div className="flex items-center justify-between">
-        <GrimText variant="label" as="h3">PORTS</GrimText>
-        <GrimButton
+        <UIText variant="label" as="h3">PORTS</UIText>
+        <UIButton
           variant="ghost"
           onClick={() => setShowAddPort(!showAddPort)}
         >
           <Plus size={16} />
           Add
-        </GrimButton>
+        </UIButton>
       </div>
 
       {showAddPort && (

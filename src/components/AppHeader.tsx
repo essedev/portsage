@@ -1,5 +1,5 @@
-import { GrimText } from "@/components/ui/GrimText";
-import { GrimBadge } from "@/components/ui/GrimBadge";
+import { UIText } from "@/components/ui/UIText";
+import { UIBadge } from "@/components/ui/UIBadge";
 import type { ProjectStatus } from "@/lib/types";
 
 interface AppHeaderProps {
@@ -21,20 +21,20 @@ export function AppHeader({ projects }: AppHeaderProps) {
       data-tauri-drag-region
     >
       <div className="flex items-baseline gap-[var(--spacing-2)]">
-        <GrimText
+        <UIText
           variant="title"
           as="h1"
           className="select-none -mt-1"
           style={{ textShadow: "0 0 12px var(--color-accent-amber-glow)" }}
         >
           portsage
-        </GrimText>
-        <GrimText variant="label" className="text-text-muted select-none">
+        </UIText>
+        <UIText variant="label" className="text-text-muted select-none">
           your port sage
-        </GrimText>
+        </UIText>
       </div>
       {totalActive > 0 && (
-        <GrimBadge variant="active">{totalActive} active</GrimBadge>
+        <UIBadge variant="active">{totalActive} active</UIBadge>
       )}
     </header>
   );

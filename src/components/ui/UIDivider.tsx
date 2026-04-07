@@ -1,8 +1,8 @@
-interface GrimDividerProps {
+interface UIDividerProps {
   className?: string;
 }
 
-export function GrimDivider({ className = "" }: GrimDividerProps) {
+export function UIDivider({ className = "" }: UIDividerProps) {
   return (
     <hr
       className={`border-0 border-t border-border-subtle ${className}`}

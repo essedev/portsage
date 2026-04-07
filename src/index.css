@@ -22,6 +22,8 @@
   --color-status-inactive-text: #6b6570;
   --color-accent-danger: #c45c5c;
   --color-accent-danger-soft: #c45c5c15;
+  --color-accent-success: #6aa886;
+  --color-accent-success-soft: #6aa88615;
 
   /* Spacing */
   --spacing-1: 4px;

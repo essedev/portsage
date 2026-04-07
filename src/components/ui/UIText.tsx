@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 
 type Variant = "title" | "section" | "body" | "label" | "mono";
 
-interface GrimTextProps {
+interface UITextProps {
   variant?: Variant;
   className?: string;
   children: ReactNode;
@@ -20,13 +20,13 @@ const variantClasses: Record<Variant, string> = {
   mono: "font-mono text-[12px] text-text-primary",
 };
 
-export function GrimText({
+export function UIText({
   variant = "body",
   className = "",
   children,
   as: Tag = "span",
   style,
-}: GrimTextProps) {
+}: UITextProps) {
   return (
     <Tag className={`${variantClasses[variant]} ${className}`} style={style}>
       {children}

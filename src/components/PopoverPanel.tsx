@@ -1,8 +1,8 @@
-import { GrimText } from "@/components/ui/GrimText";
-import { GrimBadge } from "@/components/ui/GrimBadge";
-import { GrimStatus } from "@/components/ui/GrimStatus";
-import { GrimDivider } from "@/components/ui/GrimDivider";
-import { GrimButton } from "@/components/ui/GrimButton";
+import { UIText } from "@/components/ui/UIText";
+import { UIBadge } from "@/components/ui/UIBadge";
+import { UIStatus } from "@/components/ui/UIStatus";
+import { UIDivider } from "@/components/ui/UIDivider";
+import { UIButton } from "@/components/ui/UIButton";
 import { useProjects } from "@/features/projects/useProjects";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -28,21 +28,21 @@ export function PopoverPanel() {
         className="flex items-center justify-between px-[var(--spacing-4)] h-10 shrink-0"
         data-tauri-drag-region
       >
-        <GrimText
+        <UIText
           variant="title"
           className="text-[14px]!"
           style={{ textShadow: "0 0 12px var(--color-accent-amber-glow)" }}
         >
           portsage
-        </GrimText>
+        </UIText>
         {totalPorts > 0 && (
-          <GrimBadge variant={totalActive > 0 ? "active" : "inactive"}>
+          <UIBadge variant={totalActive > 0 ? "active" : "inactive"}>
             {totalActive} active
-          </GrimBadge>
+          </UIBadge>
         )}
       </header>
 
-      <GrimDivider />
+      <UIDivider />
 
       <div className="flex-1 overflow-y-auto px-[var(--spacing-3)] py-[var(--spacing-2)]">
         {projects.length === 0 ? (
@@ -55,31 +55,31 @@ export function PopoverPanel() {
               return (
                 <div key={project.id} className="flex flex-col gap-[var(--spacing-1)]">
                   <div className="flex items-center justify-between">
-                    <GrimText variant="section" className="text-[12px]!">
+                    <UIText variant="section" className="text-[12px]!">
                       {project.name}
-                    </GrimText>
-                    <GrimText variant="mono" className="text-text-secondary text-[11px]!">
+                    </UIText>
+                    <UIText variant="mono" className="text-text-secondary text-[11px]!">
                       {project.range_start}-{project.range_end}
-                    </GrimText>
+                    </UIText>
                   </div>
                   {project.ports.map((port) => (
                     <div
                       key={port.id}
                       className="flex items-center gap-[var(--spacing-2)] pl-[var(--spacing-2)]"
                     >
-                      <GrimStatus active={port.active} />
-                      <GrimText variant="body" className="flex-1 text-[12px]!">
+                      <UIStatus active={port.active} />
+                      <UIText variant="body" className="flex-1 text-[12px]!">
                         {port.service}
-                      </GrimText>
-                      <GrimText variant="mono" className="text-[11px]! tabular-nums">
+                      </UIText>
+                      <UIText variant="mono" className="text-[11px]! tabular-nums">
                         {port.port}
-                      </GrimText>
+                      </UIText>
                     </div>
                   ))}
                   {project.ports.length === 0 && (
-                    <GrimText variant="body" className="text-text-muted text-[11px]! pl-[var(--spacing-2)]">
+                    <UIText variant="body" className="text-text-muted text-[11px]! pl-[var(--spacing-2)]">
                       No ports
-                    </GrimText>
+                    </UIText>
                   )}
                 </div>
               );
@@ -88,18 +88,18 @@ export function PopoverPanel() {
         )}
       </div>
 
-      <GrimDivider />
+      <UIDivider />
 
       <footer className="flex items-center justify-between px-[var(--spacing-4)] h-10 shrink-0">
-        <GrimButton variant="ghost" className="text-[12px]!" onClick={quit}>
+        <UIButton variant="ghost" className="text-[12px]!" onClick={quit}>
           Quit
-        </GrimButton>
-        <GrimText variant="label">
+        </UIButton>
+        <UIText variant="label">
           {totalActive}/{totalPorts} active ports
-        </GrimText>
-        <GrimButton variant="ghost" className="text-[12px]!" onClick={openMain}>
+        </UIText>
+        <UIButton variant="ghost" className="text-[12px]!" onClick={openMain}>
           Open portsage
-        </GrimButton>
+        </UIButton>
       </footer>
     </div>
   );

@@ -1,9 +1,9 @@
-interface GrimStatusProps {
+interface UIStatusProps {
   active: boolean;
   className?: string;
 }
 
-export function GrimStatus({ active, className = "" }: GrimStatusProps) {
+export function UIStatus({ active, className = "" }: UIStatusProps) {
   return (
     <span
       className={`

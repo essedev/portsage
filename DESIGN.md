@@ -126,15 +126,15 @@ Reusable base components, no domain logic.
 
 | Component | Description |
 |------------|-------------|
-| `GrimText` | Typographic wrapper. Props: `variant` (title, section, body, label, mono); renders with the right font and size |
-| `GrimCard` | Container with bg-surface, subtle border, optional glow on hover |
-| `GrimBadge` | Small badge. Variants: `active` (amber), `inactive` (grey), `danger` (red) |
-| `GrimStatus` | Port status dot. Props: `active: boolean` - amber with glow or quiet grey |
-| `GrimButton` | Button. Variants: `primary` (amber), `ghost` (transparent), `danger` (red) |
-| `GrimInput` | Input field with bg-input, subtle border, amber border on focus |
-| `GrimSearch` | Input with search icon, used for filters |
-| `GrimSelect` | Custom dropdown (no native select). Props: `options`, `value`, `onChange`. Animated chevron, list with hover/selected states |
-| `GrimDivider` | Horizontal separator line, color border-subtle |
+| `UIText` | Typographic wrapper. Props: `variant` (title, section, body, label, mono); renders with the right font and size |
+| `UICard` | Container with bg-surface, subtle border, optional glow on hover |
+| `UIBadge` | Small badge. Variants: `active` (amber), `inactive` (grey), `danger` (red) |
+| `UIStatus` | Port status dot. Props: `active: boolean` - amber with glow or quiet grey |
+| `UIButton` | Button. Variants: `primary` (amber), `ghost` (transparent), `danger` (red) |
+| `UIInput` | Input field with bg-input, subtle border, amber border on focus |
+| `UISearch` | Input with search icon, used for filters |
+| `UISelect` | Custom dropdown (no native select). Props: `options`, `value`, `onChange`. Animated chevron, list with hover/selected states |
+| `UIDivider` | Horizontal separator line, color border-subtle |
 
 ### Composed (src/components/)
 
@@ -142,9 +142,9 @@ Components that combine primitives with domain logic.
 
 | Component | Description |
 |------------|-------------|
-| `PortRow` | Single port row: service name + port (mono) + GrimStatus |
+| `PortRow` | Single port row: service name + port (mono) + UIStatus |
 | `ProjectCard` | Project card: name (section font) + range (mono) + active-ports badge + PortRow list |
-| `ProjectList` | Scrollable list of ProjectCards with GrimSearch on top |
+| `ProjectList` | Scrollable list of ProjectCards with UISearch on top |
 | `ProjectDetail` | Detail panel: project info + service list + actions |
 | `PopoverPanel` | Full popover layout: header + compact ProjectList + footer |
 | `Sidebar` | Full window sidebar: compact project list + search + add button |
@@ -156,9 +156,9 @@ Components that combine primitives with domain logic.
 
 ### Component conventions
 
-- Each component lives in a single file: `src/components/ui/GrimCard.tsx`, `src/components/ProjectCard.tsx`
+- Each component lives in a single file: `src/components/ui/UICard.tsx`, `src/components/ProjectCard.tsx`
 - Props typed with a dedicated interface in the same file
 - Styling with Tailwind classes, custom CSS tokens for design system colors
 - No component may use hardcoded colors - always via tokens
-- `Grim*` components never import composed components (one-way dependency)
-- Composed components may only import `Grim*` and other composed components
+- `UI*` components never import composed components (one-way dependency)
+- Composed components may only import `UI*` and other composed components

@@ -2,14 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import type { ProjectStatus, UnmanagedPort } from "@/lib/types";
 import * as cmd from "@/lib/commands";
 import { humanizeError } from "@/lib/errors";
+import { useToast } from "@/lib/toast";
 
 export function useProjects() {
   const [projects, setProjects] = useState<ProjectStatus[]>([]);
   const [unmanagedPorts, setUnmanagedPorts] = useState<UnmanagedPort[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const clearError = useCallback(() => setError(null), []);
+  const { showError } = useToast();
 
   const refresh = useCallback(async () => {
     try {
@@ -20,13 +19,13 @@ export function useProjects() {
       setProjects(data);
       setUnmanagedPorts(unmanaged);
     } catch (err) {
-      // Background refresh errors are surfaced to the UI but not allowed to
-      // mask the previous good data. Polling will retry on the next tick.
-      setError(humanizeError(err));
+      // Background refresh failures: surface to the user but keep the
+      // previous good data on screen. Polling will retry on the next tick.
+      showError(humanizeError(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showError]);
 
   useEffect(() => {
     refresh();
@@ -34,17 +33,16 @@ export function useProjects() {
     return () => clearInterval(interval);
   }, [refresh]);
 
-  // Wraps a mutating action so failures surface as a UI error and the caller
+  // Wraps a mutating action so failures surface as a toast and the caller
   // can decide whether to react. Returns true on success, false on failure;
   // never re-throws so callers don't need their own try/catch.
   const run = async (fn: () => Promise<unknown>): Promise<boolean> => {
     try {
       await fn();
-      setError(null);
       await refresh();
       return true;
     } catch (err) {
-      setError(humanizeError(err));
+      showError(humanizeError(err));
       return false;
     }
   };
@@ -63,8 +61,6 @@ export function useProjects() {
     projects,
     unmanagedPorts,
     loading,
-    error,
-    clearError,
     refresh,
     create,
     remove,

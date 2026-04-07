@@ -1,6 +1,6 @@
-import { GrimCard } from "@/components/ui/GrimCard";
-import { GrimText } from "@/components/ui/GrimText";
-import { GrimBadge } from "@/components/ui/GrimBadge";
+import { UICard } from "@/components/ui/UICard";
+import { UIText } from "@/components/ui/UIText";
+import { UIBadge } from "@/components/ui/UIBadge";
 import { PortRow } from "@/components/PortRow";
 import type { ProjectStatus } from "@/lib/types";
 
@@ -23,21 +23,21 @@ export function ProjectCard({
   const totalPorts = project.ports.length;
 
   return (
-    <GrimCard
+    <UICard
       glow={selected}
       onClick={onClick}
       className={selected ? "border-accent-amber" : ""}
     >
       <div className="flex items-center justify-between gap-[var(--spacing-2)]">
-        <GrimText variant="section">{project.name}</GrimText>
+        <UIText variant="section">{project.name}</UIText>
         <div className="flex items-center gap-[var(--spacing-2)]">
-          <GrimText variant="mono" className="text-text-secondary">
+          <UIText variant="mono" className="text-text-secondary">
             {project.range_start}-{project.range_end}
-          </GrimText>
+          </UIText>
           {totalPorts > 0 && (
-            <GrimBadge variant={activePorts > 0 ? "active" : "inactive"}>
+            <UIBadge variant={activePorts > 0 ? "active" : "inactive"}>
               {activePorts}/{totalPorts}
-            </GrimBadge>
+            </UIBadge>
           )}
         </div>
       </div>
@@ -49,6 +49,6 @@ export function ProjectCard({
           ))}
         </div>
       )}
-    </GrimCard>
+    </UICard>
   );
 }

@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 
 type BadgeVariant = "active" | "inactive" | "danger";
 
-interface GrimBadgeProps {
+interface UIBadgeProps {
   variant?: BadgeVariant;
   children: ReactNode;
   className?: string;
@@ -17,11 +17,11 @@ const variantClasses: Record<BadgeVariant, string> = {
     "bg-accent-danger-soft text-accent-danger border-accent-danger/20",
 };
 
-export function GrimBadge({
+export function UIBadge({
   variant = "active",
   children,
   className = "",
-}: GrimBadgeProps) {
+}: UIBadgeProps) {
   return (
     <span
       className={`

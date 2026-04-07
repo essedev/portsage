@@ -1,15 +1,18 @@
 import { useState, useEffect } from "react";
-import { GrimText } from "@/components/ui/GrimText";
-import { GrimButton } from "@/components/ui/GrimButton";
-import { GrimInput } from "@/components/ui/GrimInput";
-import { GrimDivider } from "@/components/ui/GrimDivider";
-import { GrimBadge } from "@/components/ui/GrimBadge";
-import { GrimSelect } from "@/components/ui/GrimSelect";
+import { UIText } from "@/components/ui/UIText";
+import { UIButton } from "@/components/ui/UIButton";
+import { UIInput } from "@/components/ui/UIInput";
+import { UIDivider } from "@/components/ui/UIDivider";
+import { UIBadge } from "@/components/ui/UIBadge";
+import { UISelect } from "@/components/ui/UISelect";
 import { CheckCircle, XCircle, Download, Upload, Trash2, Save, Copy, Check } from "lucide-react";
 import { save, open } from "@tauri-apps/plugin-dialog";
+import { useConfirm } from "@/lib/dialog";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { getVersion } from "@tauri-apps/api/app";
 import * as cmd from "@/lib/commands";
+import { useToast } from "@/lib/toast";
+import { humanizeError } from "@/lib/errors";
 import skillMd from "../../mcp/SKILL.md?raw";
 
 type McpClient = {
@@ -102,28 +105,30 @@ function CodeBlock({ code, label }: { code: string; label: string }) {
   return (
     <div className="flex flex-col gap-[var(--spacing-1)]">
       <div className="flex items-center justify-between">
-        <GrimText variant="label">{label}</GrimText>
+        <UIText variant="label">{label}</UIText>
         <button
           type="button"
           onClick={handleCopy}
           className="flex items-center gap-[var(--spacing-1)] text-text-muted hover:text-text-primary transition-colors cursor-pointer"
         >
           {copied ? <Check size={12} /> : <Copy size={12} />}
-          <GrimText variant="mono" className="text-[10px]!">
+          <UIText variant="mono" className="text-[10px]!">
             {copied ? "Copied" : "Copy"}
-          </GrimText>
+          </UIText>
         </button>
       </div>
       <pre className="bg-bg-deep border border-border-subtle rounded-[var(--radius-sm)] p-[var(--spacing-2)] overflow-x-auto">
-        <GrimText variant="mono" className="text-[11px]! text-text-secondary whitespace-pre-wrap break-all">
+        <UIText variant="mono" className="text-[11px]! text-text-secondary whitespace-pre-wrap break-all">
           {code}
-        </GrimText>
+        </UIText>
       </pre>
     </div>
   );
 }
 
 export function SettingsPanel() {
+  const { showSuccess, showError } = useToast();
+  const confirm = useConfirm();
   const [mcpInstalled, setMcpInstalled] = useState<boolean | null>(null);
   const [installing, setInstalling] = useState(false);
   const [basePort, setBasePort] = useState("");
@@ -168,8 +173,9 @@ export function SettingsPanel() {
       await cmd.installMcp(mcpDir);
       await new Promise((r) => setTimeout(r, 1500));
       setMcpInstalled(true);
+      showSuccess("Connected to Claude Code. Restart Claude Code to load the new tools.");
     } catch (err) {
-      console.error("Failed to install MCP:", err);
+      showError(humanizeError(err));
       await checkMcp();
     } finally {
       setInstalling(false);
@@ -177,11 +183,21 @@ export function SettingsPanel() {
   };
 
   const handleUninstall = async () => {
+    const ok = await confirm({
+      title: "Disconnect from Claude Code",
+      message:
+        "Disconnect Portsage from Claude Code? This removes the MCP server config, the skill file, and the tool permissions. You can reconnect at any time.",
+      kind: "warning",
+      okLabel: "Disconnect",
+      cancelLabel: "Cancel",
+    });
+    if (!ok) return;
     try {
       await cmd.uninstallMcp();
       setMcpInstalled(false);
+      showSuccess("Disconnected from Claude Code.");
     } catch (err) {
-      console.error("Failed to uninstall MCP:", err);
+      showError(humanizeError(err));
       await checkMcp();
     }
   };
@@ -207,9 +223,10 @@ export function SettingsPanel() {
       });
       if (path) {
         await cmd.exportData(path);
+        showSuccess("Backup exported successfully.");
       }
     } catch (err) {
-      console.error("Failed to export:", err);
+      showError(humanizeError(err));
     }
   };
 
@@ -219,12 +236,23 @@ export function SettingsPanel() {
         filters: [{ name: "Portsage", extensions: ["portsage"] }],
         multiple: false,
       });
-      if (path) {
-        await cmd.importData(path);
-        await loadConfig();
-      }
+      if (!path) return;
+      // Import overwrites the entire database with the contents of the archive.
+      // Confirm explicitly so the user can't lose their current data with a single click.
+      const ok = await confirm({
+        title: "Replace current data",
+        message:
+          "Importing this file will REPLACE your current Portsage database, including all projects, ports, and settings. This cannot be undone. Continue?",
+        kind: "warning",
+        okLabel: "Replace",
+        cancelLabel: "Cancel",
+      });
+      if (!ok) return;
+      await cmd.importData(path);
+      await loadConfig();
+      showSuccess("Data imported successfully.");
     } catch (err) {
-      console.error("Failed to import:", err);
+      showError(humanizeError(err));
     }
   };
 
@@ -241,17 +269,17 @@ export function SettingsPanel() {
 
   return (
     <div className="flex flex-col gap-[var(--spacing-6)] p-[var(--spacing-5)]">
-      <GrimText variant="title" as="h2">
+      <UIText variant="title" as="h2">
         Settings
-      </GrimText>
+      </UIText>
 
-      <GrimDivider />
+      <UIDivider />
 
       {/* Port Config Section */}
       <div className="flex flex-col gap-[var(--spacing-3)]">
-        <GrimText variant="section" as="h3">
+        <UIText variant="section" as="h3">
           Port configuration
-        </GrimText>
+        </UIText>
 
         <label className="inline-flex items-center gap-[var(--spacing-2)] cursor-pointer w-fit">
           <button
@@ -274,103 +302,103 @@ export function SettingsPanel() {
               `}
             />
           </button>
-          <GrimText variant="body">Launch at login</GrimText>
+          <UIText variant="body">Launch at login</UIText>
         </label>
 
-        <GrimDivider />
+        <UIDivider />
 
-        <GrimText variant="section" as="h3">
+        <UIText variant="section" as="h3">
           Port range
-        </GrimText>
+        </UIText>
 
-        <GrimText variant="body" className="text-text-secondary">
+        <UIText variant="body" className="text-text-secondary">
           Changes only affect new projects. Already assigned ranges stay the same.
-        </GrimText>
+        </UIText>
 
         <div className="flex items-end gap-[var(--spacing-3)]">
-          <GrimInput
+          <UIInput
             label="Base port"
             type="number"
             value={basePort}
             onChange={(e) => setBasePort(e.target.value)}
             wrapperClassName="w-32"
           />
-          <GrimInput
+          <UIInput
             label="Range size"
             type="number"
             value={rangeSize}
             onChange={(e) => setRangeSize(e.target.value)}
             wrapperClassName="w-32"
           />
-          <GrimButton variant="primary" onClick={handleSaveConfig}>
+          <UIButton variant="primary" onClick={handleSaveConfig}>
             <Save size={14} />
             {configSaved ? "Saved" : "Save"}
-          </GrimButton>
+          </UIButton>
         </div>
       </div>
 
-      <GrimDivider />
+      <UIDivider />
 
       {/* MCP Section */}
       <div className="flex flex-col gap-[var(--spacing-3)]">
-        <GrimText variant="section" as="h3">
+        <UIText variant="section" as="h3">
           MCP integration
-        </GrimText>
+        </UIText>
 
         {/* Claude Code - Auto Install */}
         <div className="flex flex-col gap-[var(--spacing-2)]">
-          <GrimText variant="label">Claude Code</GrimText>
+          <UIText variant="label">Claude Code</UIText>
           <div className="flex items-center gap-[var(--spacing-3)]">
             {mcpInstalled === null ? (
-              <GrimText variant="body" className="text-text-muted">
+              <UIText variant="body" className="text-text-muted">
                 Checking...
-              </GrimText>
+              </UIText>
             ) : mcpInstalled ? (
               <>
-                <GrimBadge variant="active">
+                <UIBadge variant="active">
                   <CheckCircle size={12} />
                   Connected
-                </GrimBadge>
-                <GrimButton variant="danger" onClick={handleUninstall}>
+                </UIBadge>
+                <UIButton variant="danger" onClick={handleUninstall}>
                   <Trash2 size={14} />
                   Remove
-                </GrimButton>
+                </UIButton>
               </>
             ) : (
               <>
-                <GrimBadge variant="inactive">
+                <UIBadge variant="inactive">
                   <XCircle size={12} />
                   Not connected
-                </GrimBadge>
-                <GrimButton
+                </UIBadge>
+                <UIButton
                   variant="primary"
                   onClick={handleInstall}
                   disabled={installing}
                 >
                   <Download size={14} />
                   {installing ? "Connecting..." : "Connect"}
-                </GrimButton>
+                </UIButton>
               </>
             )}
           </div>
 
-          <GrimText variant="body" className="text-text-secondary">
+          <UIText variant="body" className="text-text-secondary">
             {mcpInstalled
               ? "Claude Code can now manage your project ports automatically. Restart Claude Code if you just connected."
               : "Connect to Claude Code to reserve ports and register services automatically."}
-          </GrimText>
+          </UIText>
 
           {mcpInstalled && (
             <div className="flex flex-col gap-[var(--spacing-1)] bg-bg-surface rounded-[var(--radius-md)] p-[var(--spacing-3)]">
-              <GrimText variant="label">Available tools</GrimText>
+              <UIText variant="label">Available tools</UIText>
               <div className="flex flex-wrap gap-[var(--spacing-1)]">
                 {["list_all", "reserve_range", "register_port", "release_project", "scan_active"].map(
                   (tool) => (
-                    <GrimBadge key={tool} variant="inactive">
-                      <GrimText variant="mono" className="text-[10px]!">
+                    <UIBadge key={tool} variant="inactive">
+                      <UIText variant="mono" className="text-[10px]!">
                         {tool}
-                      </GrimText>
-                    </GrimBadge>
+                      </UIText>
+                    </UIBadge>
                   ),
                 )}
               </div>
@@ -378,13 +406,13 @@ export function SettingsPanel() {
           )}
         </div>
 
-        <GrimDivider />
+        <UIDivider />
 
         {/* Other Editors - Manual Config */}
         <div className="flex flex-col gap-[var(--spacing-2)]">
-          <GrimText variant="label">Other editors</GrimText>
+          <UIText variant="label">Other editors</UIText>
 
-          <GrimSelect
+          <UISelect
             label="Select editor"
             options={MCP_CLIENTS.map((c) => ({ value: c.value, label: c.label }))}
             value={selectedClient}
@@ -401,58 +429,58 @@ export function SettingsPanel() {
               <div className="flex flex-col gap-[var(--spacing-3)]">
                 <CodeBlock code={configCode} label={configLabel} />
 
-                <GrimText variant="body" className="text-text-secondary">
-                  Paste the config into <GrimText variant="mono" className="text-[11px]!">{client.configPath}</GrimText>
-                </GrimText>
+                <UIText variant="body" className="text-text-secondary">
+                  Paste the config into <UIText variant="mono" className="text-[11px]!">{client.configPath}</UIText>
+                </UIText>
 
                 {client.rulesPath && (
                   <CodeBlock code={generateRulesContent(client)} label={`Instructions for ${client.label}`} />
                 )}
 
                 {client.rulesPath && (
-                  <GrimText variant="body" className="text-text-secondary">
-                    Paste the instructions into the file <GrimText variant="mono" className="text-[11px]!">{client.rulesPath}</GrimText> at the root of your project.
-                  </GrimText>
+                  <UIText variant="body" className="text-text-secondary">
+                    Paste the instructions into the file <UIText variant="mono" className="text-[11px]!">{client.rulesPath}</UIText> at the root of your project.
+                  </UIText>
                 )}
 
-                <GrimText variant="body" className="text-text-muted text-[11px]!">
+                <UIText variant="body" className="text-text-muted text-[11px]!">
                   Portsage must be running to use the MCP tools.
-                </GrimText>
+                </UIText>
               </div>
             );
           })()}
         </div>
       </div>
 
-      <GrimDivider />
+      <UIDivider />
 
       {/* Export/Import Section */}
       <div className="flex flex-col gap-[var(--spacing-3)]">
-        <GrimText variant="section" as="h3">
+        <UIText variant="section" as="h3">
           Data
-        </GrimText>
+        </UIText>
 
-        <GrimText variant="body" className="text-text-secondary">
+        <UIText variant="body" className="text-text-secondary">
           Export or import the database and preferences for backup or migration.
-        </GrimText>
+        </UIText>
 
         <div className="flex gap-[var(--spacing-2)]">
-          <GrimButton variant="ghost" onClick={handleExport}>
+          <UIButton variant="ghost" onClick={handleExport}>
             <Download size={14} />
             Export
-          </GrimButton>
-          <GrimButton variant="ghost" onClick={handleImport}>
+          </UIButton>
+          <UIButton variant="ghost" onClick={handleImport}>
             <Upload size={14} />
             Import
-          </GrimButton>
+          </UIButton>
         </div>
       </div>
 
       {version && (
         <div className="flex justify-end pt-[var(--spacing-2)]">
-          <GrimText variant="mono" className="text-[10px]! text-text-muted">
+          <UIText variant="mono" className="text-[10px]! text-text-muted">
             v{version}
-          </GrimText>
+          </UIText>
         </div>
       )}
     </div>

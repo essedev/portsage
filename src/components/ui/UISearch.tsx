@@ -1,9 +1,9 @@
 import { Search } from "lucide-react";
 import { type InputHTMLAttributes } from "react";
 
-interface GrimSearchProps extends InputHTMLAttributes<HTMLInputElement> {}
+interface UISearchProps extends InputHTMLAttributes<HTMLInputElement> {}
 
-export function GrimSearch({ className = "", ...props }: GrimSearchProps) {
+export function UISearch({ className = "", ...props }: UISearchProps) {
   return (
     <div className={`relative ${className}`}>
       <Search

@@ -439,4 +439,68 @@ mod tests {
         assert_eq!(projects[0].ports.len(), 1);
         assert_eq!(projects[0].ports[0].service, "api");
     }
+
+    /// Regression test for the create_project race condition.
+    ///
+    /// Before the fix, `create_project` called `next_available_range()` (which
+    /// took the mutex, computed MAX(range_end), released it) and then locked
+    /// the mutex again to insert. Two threads could read the same MAX value
+    /// concurrently and produce overlapping ranges. After the fix, range
+    /// computation and insert happen under a single lock.
+    ///
+    /// This test spawns N threads that all create a project simultaneously
+    /// and asserts that the resulting ranges are unique and non-overlapping.
+    #[test]
+    fn concurrent_create_project_produces_no_overlapping_ranges() {
+        use std::sync::Arc;
+        use std::thread;
+
+        const THREADS: usize = 16;
+
+        let db = Arc::new(fresh_db());
+        let mut handles = Vec::with_capacity(THREADS);
+
+        for i in 0..THREADS {
+            let db = db.clone();
+            handles.push(thread::spawn(move || {
+                let name = format!("project-{}", i);
+                db.create_project(&name, None).unwrap()
+            }));
+        }
+
+        let mut projects: Vec<Project> =
+            handles.into_iter().map(|h| h.join().unwrap()).collect();
+        projects.sort_by_key(|p| p.range_start);
+
+        // All starts must be unique.
+        let starts: std::collections::HashSet<i64> =
+            projects.iter().map(|p| p.range_start).collect();
+        assert_eq!(
+            starts.len(),
+            THREADS,
+            "duplicate range_start across concurrent inserts: {:?}",
+            projects.iter().map(|p| p.range_start).collect::<Vec<_>>()
+        );
+
+        // No range may overlap with the previous one (sorted by start).
+        for pair in projects.windows(2) {
+            assert!(
+                pair[0].range_end < pair[1].range_start,
+                "overlapping ranges: {}-{} and {}-{}",
+                pair[0].range_start,
+                pair[0].range_end,
+                pair[1].range_start,
+                pair[1].range_end,
+            );
+        }
+
+        // And the contiguous packing invariant still holds: with the default
+        // base_port=4000 and range_size=10, N projects should fully cover
+        // [4000, 4000 + N*10).
+        assert_eq!(projects.first().unwrap().range_start, 4000);
+        assert_eq!(
+            projects.last().unwrap().range_end,
+            4000 + (THREADS as i64) * 10 - 1,
+        );
+    }
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { GrimSearch } from "@/components/ui/GrimSearch";
+import { UISearch } from "@/components/ui/UISearch";
 import { ProjectCard } from "@/components/ProjectCard";
 import type { ProjectStatus } from "@/lib/types";
 
@@ -26,7 +26,7 @@ export function ProjectList({
 
   return (
     <div className="flex flex-col gap-[var(--spacing-3)]">
-      <GrimSearch
+      <UISearch
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />

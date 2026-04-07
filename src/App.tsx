@@ -6,25 +6,17 @@ import { ProjectDetail } from "@/components/ProjectDetail";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { UnmanagedPortsPanel } from "@/components/UnmanagedPortsPanel";
 import { PopoverPanel } from "@/components/PopoverPanel";
-import { GrimText } from "@/components/ui/GrimText";
-import { GrimToast } from "@/components/ui/GrimToast";
+import { UIText } from "@/components/ui/UIText";
+import { ToastProvider } from "@/lib/toast";
+import { DialogProvider } from "@/lib/dialog";
 import { useProjects } from "@/features/projects/useProjects";
 import type { ProjectStatus } from "@/lib/types";
 
 type View = "project" | "unmanaged" | "settings";
 
 function MainWindow() {
-  const {
-    projects,
-    unmanagedPorts,
-    loading,
-    error,
-    clearError,
-    create,
-    remove,
-    addPort,
-    removePort,
-  } = useProjects();
+  const { projects, unmanagedPorts, loading, create, remove, addPort, removePort } =
+    useProjects();
   const [selected, setSelected] = useState<ProjectStatus | null>(null);
   const [activeView, setActiveView] = useState<View>("project");
 
@@ -65,9 +57,9 @@ function MainWindow() {
         <main className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center h-full">
-              <GrimText variant="body" className="text-text-muted">
+              <UIText variant="body" className="text-text-muted">
                 Loading...
-              </GrimText>
+              </UIText>
             </div>
           ) : activeView === "settings" ? (
             <SettingsPanel />
@@ -85,15 +77,13 @@ function MainWindow() {
             />
           ) : (
             <div className="flex items-center justify-center h-full">
-              <GrimText variant="body" className="text-text-muted">
+              <UIText variant="body" className="text-text-muted">
                 Select a project from the sidebar
-              </GrimText>
+              </UIText>
             </div>
           )}
         </main>
       </div>
-
-      <GrimToast message={error} onDismiss={clearError} />
     </div>
   );
 }
@@ -112,7 +102,13 @@ function App() {
     return <PopoverPanel />;
   }
 
-  return <MainWindow />;
+  return (
+    <ToastProvider>
+      <DialogProvider>
+        <MainWindow />
+      </DialogProvider>
+    </ToastProvider>
+  );
 }
 
 export default App;

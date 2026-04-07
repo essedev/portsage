@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { GrimInput } from "@/components/ui/GrimInput";
-import { GrimButton } from "@/components/ui/GrimButton";
+import { UIInput } from "@/components/ui/UIInput";
+import { UIButton } from "@/components/ui/UIButton";
 
 interface AddProjectFormProps {
   onSubmit: (name: string, path?: string) => void;
@@ -23,26 +23,26 @@ export function AddProjectForm({ onSubmit, onCancel }: AddProjectFormProps) {
       onSubmit={handleSubmit}
       className="flex flex-col gap-[var(--spacing-2)] p-[var(--spacing-3)]"
     >
-      <GrimInput
+      <UIInput
         label="Project name"
         placeholder="e.g. my-project"
         value={name}
         onChange={(e) => setName(e.target.value)}
         autoFocus
       />
-      <GrimInput
+      <UIInput
         label="Path (optional)"
         placeholder="/Users/.../project"
         value={path}
         onChange={(e) => setPath(e.target.value)}
       />
       <div className="flex justify-end gap-[var(--spacing-2)]">
-        <GrimButton variant="ghost" type="button" onClick={onCancel}>
+        <UIButton variant="ghost" type="button" onClick={onCancel}>
           Cancel
-        </GrimButton>
-        <GrimButton variant="primary" type="submit">
+        </UIButton>
+        <UIButton variant="primary" type="submit">
           Create project
-        </GrimButton>
+        </UIButton>
       </div>
     </form>
   );

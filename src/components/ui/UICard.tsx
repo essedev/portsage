@@ -1,18 +1,18 @@
 import { type ReactNode } from "react";
 
-interface GrimCardProps {
+interface UICardProps {
   children: ReactNode;
   className?: string;
   glow?: boolean;
   onClick?: () => void;
 }
 
-export function GrimCard({
+export function UICard({
   children,
   className = "",
   glow = false,
   onClick,
-}: GrimCardProps) {
+}: UICardProps) {
   return (
     <div
       onClick={onClick}
