@@ -1,12 +1,33 @@
 """Grimport MCP server - thin client that forwards requests to the Tauri backend via Unix socket."""
 
 import json
+import os
 import socket
+import sys
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-SOCKET_PATH = Path.home() / ".config" / "grimport" / "grimport.sock"
+
+def _socket_path() -> Path:
+    """Return the grimport socket path matching what the Rust app creates.
+
+    Mirrors `dirs::config_dir()` from the Rust side:
+      - macOS:   ~/Library/Application Support/grimport/grimport.sock
+      - Linux:   ~/.config/grimport/grimport.sock
+      - Windows: %APPDATA%\\grimport\\grimport.sock
+    """
+    home = Path.home()
+    if sys.platform == "darwin":
+        base = home / "Library" / "Application Support"
+    elif sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA", str(home)))
+    else:
+        base = home / ".config"
+    return base / "grimport" / "grimport.sock"
+
+
+SOCKET_PATH = _socket_path()
 
 mcp = FastMCP("grimport", json_response=True)
 
