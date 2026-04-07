@@ -116,13 +116,12 @@ pub fn run() {
     app.set_activation_policy(ActivationPolicy::Accessory);
 
     app.run(|app_handle: &tauri::AppHandle, event: RunEvent| {
-        if let RunEvent::WindowEvent {
-            label,
-            event: WindowEvent::CloseRequested { api, .. },
-            ..
-        } = &event
-        {
-            if label == "main" {
+        match &event {
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::CloseRequested { api, .. },
+                ..
+            } if label == "main" => {
                 api.prevent_close();
                 if let Some(window) = app_handle.get_webview_window("main") {
                     let _ = window.hide();
@@ -130,6 +129,19 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 let _ = app_handle.set_activation_policy(ActivationPolicy::Accessory);
             }
+            // macOS: when the user re-launches the app from Spotlight/Finder/Dock
+            // while the process is already running, Tauri delivers Reopen instead
+            // of a fresh launch. Without this handler the dock icon appears but no
+            // window is shown, forcing a force-quit. Re-show the main window.
+            #[cfg(target_os = "macos")]
+            RunEvent::Reopen { .. } => {
+                let _ = app_handle.set_activation_policy(ActivationPolicy::Regular);
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            _ => {}
         }
     });
 }

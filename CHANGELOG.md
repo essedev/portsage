@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-04-07
+
+### Fixed
+- Tray icon missing at launch: the main window no longer opens visible at startup, so the app starts as a pure menubar app and the status bar icon is shown immediately
+- Reopening the app from Spotlight/Finder/Dock after closing it with the X now correctly re-shows the main window via `RunEvent::Reopen`, instead of leaving a dock icon with no UI and forcing a force-quit
+
 ## [0.6.1] - 2026-04-07
 
 ### Added
