@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-04-07
+
+### Fixed
+- Duplicate tray icons when more than one Portsage process was running (e.g. dev build + installed .app, or accidental relaunch): added `tauri-plugin-single-instance` so a second launch focuses the existing instance instead of spawning a new one
+- Main window now opens at first launch again (regression introduced in 0.7.1 where the window was hidden at startup)
+
 ## [0.7.1] - 2026-04-07
 
 ### Fixed

@@ -31,6 +31,20 @@ pub fn run() {
     socket::start_socket_server(database.clone());
 
     let mut app = tauri::Builder::default()
+        // Single-instance must be registered first: if another Portsage process is
+        // already running, this callback fires in the existing process and the new
+        // one exits immediately. Without this we'd get duplicate tray icons (one per
+        // process) when the user accidentally launches twice (e.g. dev build + the
+        // installed .app, or relaunch from Spotlight while it's already running).
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            #[cfg(target_os = "macos")]
+            let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
