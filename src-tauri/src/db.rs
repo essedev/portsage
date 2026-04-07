@@ -233,6 +233,18 @@ impl Database {
         port: i64,
     ) -> Result<Port> {
         let conn = self.conn.lock().unwrap();
+        // Validate the port is within the project's reserved range.
+        let (range_start, range_end): (i64, i64) = conn.query_row(
+            "SELECT range_start, range_end FROM projects WHERE id = ?1",
+            params![project_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        if port < range_start || port > range_end {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "port {} is outside project range {}-{}",
+                port, range_start, range_end
+            )));
+        }
         conn.execute(
             "INSERT INTO ports (project_id, service, port) VALUES (?1, ?2, ?3)",
             params![project_id, service, port],
@@ -343,6 +355,20 @@ mod tests {
         db.add_port(p.id, "vite", 4000).unwrap();
         let err = db.add_port(p.id, "api", 4000);
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn port_outside_range_fails() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", None).unwrap();
+        // range is 4000-4009; 9999 is outside
+        let err = db.add_port(p.id, "cache", 9999);
+        assert!(err.is_err(), "expected error for port outside range");
+        // boundaries should work
+        db.add_port(p.id, "low", 4000).unwrap();
+        db.add_port(p.id, "high", 4009).unwrap();
+        // one past the end fails
+        assert!(db.add_port(p.id, "off", 4010).is_err());
     }
 
     #[test]
