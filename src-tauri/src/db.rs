@@ -240,10 +240,16 @@ impl Database {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
         if port < range_start || port > range_end {
-            return Err(rusqlite::Error::InvalidParameterName(format!(
-                "port {} is outside project range {}-{}",
-                port, range_start, range_end
-            )));
+            // Use SqliteFailure with a custom message: its Display impl prints only the
+            // message (no "Invalid parameter name:" or other rusqlite-specific prefix),
+            // so the error surfaces cleanly through the MCP socket and Tauri command layer.
+            return Err(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CONSTRAINT),
+                Some(format!(
+                    "port {} is outside project range {}-{}",
+                    port, range_start, range_end
+                )),
+            ));
         }
         conn.execute(
             "INSERT INTO ports (project_id, service, port) VALUES (?1, ?2, ?3)",

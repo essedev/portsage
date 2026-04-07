@@ -271,15 +271,12 @@ pub fn get_mcp_dir(app: tauri::AppHandle) -> Result<String, String> {
         .join("grimport")
         .join("mcp");
 
-    // If already set up in config dir, return it
-    if config_mcp.join("server.py").exists() {
-        return Ok(config_mcp.to_string_lossy().to_string());
-    }
-
-    // Try to copy from bundled resources
+    // Always prefer bundled resources when available, overwriting any existing files in
+    // the config dir. This is critical: it lets app upgrades (e.g. brew upgrade) propagate
+    // fixes to server.py / SKILL.md to users who already have a copy from a previous install,
+    // instead of leaving them stuck with stale files.
     let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
     let bundled_mcp = resource_dir.join("mcp");
-
     if bundled_mcp.join("server.py").exists() {
         std::fs::create_dir_all(&config_mcp).map_err(|e| e.to_string())?;
         for file in &["server.py", "pyproject.toml", "SKILL.md"] {
@@ -292,7 +289,13 @@ pub fn get_mcp_dir(app: tauri::AppHandle) -> Result<String, String> {
         return Ok(config_mcp.to_string_lossy().to_string());
     }
 
-    // Dev mode: resolve from executable location
+    // No bundled resources (dev mode without resource_dir, or unusual install): if the
+    // user already has files in the config dir, use them as-is.
+    if config_mcp.join("server.py").exists() {
+        return Ok(config_mcp.to_string_lossy().to_string());
+    }
+
+    // Dev mode: resolve from executable location, walking up to find a sibling mcp dir.
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let dev_mcp = exe
         .ancestors()
@@ -331,10 +334,20 @@ pub fn install_mcp(mcp_dir: String) -> Result<(), String> {
     let mcp_dir = std::path::PathBuf::from(&mcp_dir);
 
     // 1. Write MCP server config to ~/.claude.json
+    // If the file already exists we MUST be able to parse it. Falling back to {} on parse
+    // failure would silently destroy the user's entire Claude config (other MCP servers,
+    // settings, history, etc.) so we bail with a clear error instead.
     let claude_json_path = home.join(".claude.json");
     let mut claude_json: serde_json::Value = if claude_json_path.exists() {
         let content = std::fs::read_to_string(&claude_json_path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
+        serde_json::from_str(&content).map_err(|e| {
+            format!(
+                "{} appears to be corrupt and cannot be parsed: {}. Refusing to overwrite. \
+                 Fix or back up the file manually before retrying.",
+                claude_json_path.display(),
+                e
+            )
+        })?
     } else {
         serde_json::json!({})
     };
@@ -360,11 +373,18 @@ pub fn install_mcp(mcp_dir: String) -> Result<(), String> {
     let skill_dest = skill_dir.join("SKILL.md");
     std::fs::copy(&skill_source, &skill_dest).map_err(|e| e.to_string())?;
 
-    // 3. Add tool permissions to ~/.claude/settings.json
+    // 3. Add tool permissions to ~/.claude/settings.json (same parse-or-bail policy as above)
     let settings_path = home.join(".claude").join("settings.json");
     let mut settings: serde_json::Value = if settings_path.exists() {
         let content = std::fs::read_to_string(&settings_path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
+        serde_json::from_str(&content).map_err(|e| {
+            format!(
+                "{} appears to be corrupt and cannot be parsed: {}. Refusing to overwrite. \
+                 Fix or back up the file manually before retrying.",
+                settings_path.display(),
+                e
+            )
+        })?
     } else {
         serde_json::json!({})
     };

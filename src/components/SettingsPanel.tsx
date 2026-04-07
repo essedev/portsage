@@ -19,13 +19,14 @@ type McpClient = {
   format: "mcpServers" | "contextServers" | "toml";
 };
 
+// Ordered by user-base popularity (rough). Update as the ecosystem shifts.
 const MCP_CLIENTS: McpClient[] = [
   { value: "cursor", label: "Cursor", configPath: "~/.cursor/mcp.json", rulesPath: ".cursorrules", format: "mcpServers" },
-  { value: "windsurf", label: "Windsurf", configPath: "~/.codeium/windsurf/mcp_config.json", rulesPath: ".windsurfrules", format: "mcpServers" },
   { value: "vscode", label: "VS Code (Copilot)", configPath: ".vscode/mcp.json", rulesPath: null, format: "mcpServers" },
   { value: "claude-desktop", label: "Claude Desktop", configPath: "~/Library/Application Support/Claude/claude_desktop_config.json", rulesPath: null, format: "mcpServers" },
-  { value: "continue", label: "Continue", configPath: "~/.continue/config.json", rulesPath: null, format: "mcpServers" },
   { value: "cline", label: "Cline (VS Code)", configPath: "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json", rulesPath: null, format: "mcpServers" },
+  { value: "windsurf", label: "Windsurf", configPath: "~/.codeium/windsurf/mcp_config.json", rulesPath: ".windsurfrules", format: "mcpServers" },
+  { value: "continue", label: "Continue", configPath: "~/.continue/config.json", rulesPath: null, format: "mcpServers" },
   { value: "codex", label: "Codex (OpenAI)", configPath: "~/.codex/config.toml", rulesPath: null, format: "toml" },
   { value: "zed", label: "Zed", configPath: "~/.config/zed/settings.json", rulesPath: null, format: "contextServers" },
 ];
