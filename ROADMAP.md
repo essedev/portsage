@@ -45,3 +45,11 @@
 - [x] Homebrew tap (`brew tap essedev/grimport && brew install grimport`)
 - [x] GitHub release con DMG allegato
 - [ ] Auto-update (Tauri updater) - futuro
+
+## v0.6 - CI/CD e cross-platform
+
+- [ ] GitHub Action per build automatiche su push/release
+- [ ] Build universal binary macOS (arm64 + x86_64)
+- [ ] Supporto Linux: adattare scanner (lsof/ss), tray icon, activation policy
+- [ ] Supporto Windows: socket Unix -> named pipe, scanner via netstat/API, comandi OS-specifici
+- [ ] Test cross-platform in CI

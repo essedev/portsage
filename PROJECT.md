@@ -89,7 +89,7 @@ Le porte non gestite sono filtrate: solo porte >= 3000, esclusi processi di sist
 - **Homebrew**: `brew tap essedev/grimport && brew install grimport`
 - **GitHub**: https://github.com/essedev/grimport
 
-## Integrazione con Claude Code
+## Integrazione MCP
 
 Il MCP server espone 5 tool:
 - `list_all` - registry completo + stato porte
@@ -98,7 +98,11 @@ Il MCP server espone 5 tool:
 - `release_project(project_name)` - libera range
 - `scan_active` - porte attive sulla macchina
 
-L'installazione avviene dall'app (Impostazioni > "Connetti a Claude Code") o da terminale (`mcp/install.sh`). Installa MCP server, skill file e permessi tool.
+**Claude Code**: installazione automatica dall'app (Impostazioni > "Configura MCP" > Claude Code) o da terminale (`mcp/install.sh`). Installa MCP server, skill file e permessi tool.
+
+**Altri editor**: l'app supporta config copy-paste per Cursor, Windsurf, VS Code (Copilot), Claude Desktop, Continue, Cline, Codex (TOML), Zed (`context_servers`). La sezione "Altri editor" in Impostazioni > "Configura MCP" mostra dropdown editor + config gia' generata col path corretto della directory MCP, pronta da incollare nel file di config dell'editor.
+
+I file MCP server (`server.py`, `pyproject.toml`, `SKILL.md`) vengono bundlati come risorse nell'app `.dmg` e copiati in `~/Library/Application Support/grimport/mcp/` al primo uso (vedi `commands::get_mcp_dir`).
 
 ## UI
 
@@ -123,7 +127,7 @@ Finestra ridimensionabile (min 700x400) con titlebar trasparente.
 - Bottone "Nuovo progetto"
 - Lista progetti con badge porte attive
 - Sezione "Non gestite" con conteggio (visibile solo se presenti)
-- Bottone "Connetti a Claude Code" (visibile solo se MCP non installato)
+- Bottone "Configura MCP" (visibile solo se MCP non installato per Claude Code)
 - Bottone "Impostazioni"
 
 **Dettaglio progetto** (pannello principale)
@@ -139,7 +143,9 @@ Finestra ridimensionabile (min 700x400) con titlebar trasparente.
 **Impostazioni**
 - Avvio automatico al login (toggle)
 - Configurazione base_port e range_size
-- Integrazione Claude Code: stato connessione, installa/rimuovi, lista tool disponibili
+- Configura MCP: due sezioni
+  - **Claude Code**: stato connessione, installa/rimuovi, lista tool disponibili
+  - **Altri editor**: dropdown editor + config copy-paste con istruzioni per Cursor, Windsurf, VS Code, Claude Desktop, Continue, Cline, Codex, Zed
 - Export/import dati (.grimport = zip con DB + config)
 
 ### Icona menubar

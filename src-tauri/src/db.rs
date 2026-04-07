@@ -47,6 +47,16 @@ impl Database {
         Ok(db)
     }
 
+    #[cfg(test)]
+    pub fn in_memory() -> Result<Self> {
+        let conn = Connection::open_in_memory()?;
+        let db = Self {
+            conn: Mutex::new(conn),
+        };
+        db.migrate()?;
+        Ok(db)
+    }
+
     fn db_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
@@ -248,5 +258,132 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM ports WHERE id = ?1", params![id])?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fresh_db() -> Database {
+        Database::in_memory().expect("failed to create in-memory db")
+    }
+
+    #[test]
+    fn default_config_values() {
+        let db = fresh_db();
+        assert_eq!(db.get_config("base_port").unwrap(), "4000");
+        assert_eq!(db.get_config("range_size").unwrap(), "10");
+    }
+
+    #[test]
+    fn config_update() {
+        let db = fresh_db();
+        db.set_config("base_port", "5000").unwrap();
+        assert_eq!(db.get_config("base_port").unwrap(), "5000");
+        // range_size unchanged
+        assert_eq!(db.get_config("range_size").unwrap(), "10");
+    }
+
+    #[test]
+    fn first_project_starts_at_base_port() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", None).unwrap();
+        assert_eq!(p.range_start, 4000);
+        assert_eq!(p.range_end, 4009);
+    }
+
+    #[test]
+    fn sequential_ranges_do_not_overlap() {
+        let db = fresh_db();
+        let a = db.create_project("alpha", None).unwrap();
+        let b = db.create_project("bravo", None).unwrap();
+        let c = db.create_project("charlie", None).unwrap();
+        assert_eq!(a.range_start, 4000);
+        assert_eq!(b.range_start, 4010);
+        assert_eq!(c.range_start, 4020);
+        // No overlap
+        assert!(a.range_end < b.range_start);
+        assert!(b.range_end < c.range_start);
+    }
+
+    #[test]
+    fn custom_config_affects_next_range() {
+        let db = fresh_db();
+        db.set_config("base_port", "8000").unwrap();
+        db.set_config("range_size", "5").unwrap();
+        let p = db.create_project("alpha", None).unwrap();
+        assert_eq!(p.range_start, 8000);
+        assert_eq!(p.range_end, 8004);
+    }
+
+    #[test]
+    fn gap_after_delete_not_reused() {
+        let db = fresh_db();
+        let a = db.create_project("alpha", None).unwrap();
+        let b = db.create_project("bravo", None).unwrap();
+        db.delete_project(a.id).unwrap();
+        // Next range continues after bravo, does not fill the gap
+        let c = db.create_project("charlie", None).unwrap();
+        assert_eq!(c.range_start, b.range_end + 1);
+    }
+
+    #[test]
+    fn duplicate_project_name_fails() {
+        let db = fresh_db();
+        db.create_project("alpha", None).unwrap();
+        let err = db.create_project("alpha", None);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn duplicate_port_fails() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", None).unwrap();
+        db.add_port(p.id, "vite", 4000).unwrap();
+        let err = db.add_port(p.id, "api", 4000);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn delete_project_cascades_ports() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", None).unwrap();
+        db.add_port(p.id, "vite", 4000).unwrap();
+        db.add_port(p.id, "api", 4001).unwrap();
+        db.delete_project(p.id).unwrap();
+        let projects = db.list_projects().unwrap();
+        assert!(projects.is_empty());
+        // Ports also gone - can reuse them
+        let q = db.create_project("bravo", None).unwrap();
+        db.add_port(q.id, "vite", 4000).unwrap(); // would fail if not cascaded
+    }
+
+    #[test]
+    fn list_projects_returns_with_ports() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", Some("/tmp/alpha")).unwrap();
+        db.add_port(p.id, "vite", 4000).unwrap();
+        db.add_port(p.id, "api", 4001).unwrap();
+        let projects = db.list_projects().unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].project.name, "alpha");
+        assert_eq!(projects[0].project.path, Some("/tmp/alpha".to_string()));
+        assert_eq!(projects[0].ports.len(), 2);
+        // Ports ordered by port number
+        assert_eq!(projects[0].ports[0].port, 4000);
+        assert_eq!(projects[0].ports[1].port, 4001);
+    }
+
+    #[test]
+    fn remove_single_port() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", None).unwrap();
+        let port_a = db.add_port(p.id, "vite", 4000).unwrap();
+        db.add_port(p.id, "api", 4001).unwrap();
+        db.remove_port(port_a.id).unwrap();
+        let projects = db.list_projects().unwrap();
+        assert_eq!(projects[0].ports.len(), 1);
+        assert_eq!(projects[0].ports[0].service, "api");
     }
 }

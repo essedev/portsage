@@ -49,6 +49,7 @@ pub fn run() {
             commands::import_data,
             commands::show_main_window,
             commands::quit_app,
+            commands::get_mcp_dir,
             commands::check_mcp_installed,
             commands::install_mcp,
             commands::uninstall_mcp,

@@ -49,7 +49,7 @@ pub fn start_socket_server(db: Arc<Database>) {
     });
 }
 
-fn handle_request(db: &Database, line: &str) -> Value {
+pub(crate) fn handle_request(db: &Database, line: &str) -> Value {
     let req: Value = match serde_json::from_str(line) {
         Ok(v) => v,
         Err(e) => return json!({"error": format!("invalid json: {}", e)}),
@@ -169,5 +169,189 @@ fn handle_request(db: &Database, line: &str) -> Value {
         }
 
         _ => json!({"error": format!("unknown method: {}", method)}),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::Database;
+
+    fn fresh_db() -> Database {
+        Database::in_memory().expect("failed to create in-memory db")
+    }
+
+    fn req(db: &Database, json: &str) -> Value {
+        handle_request(db, json)
+    }
+
+    // --- Protocol errors ---
+
+    #[test]
+    fn invalid_json_returns_error() {
+        let db = fresh_db();
+        let res = req(&db, "not json");
+        assert!(res["error"].as_str().unwrap().contains("invalid json"));
+    }
+
+    #[test]
+    fn unknown_method_returns_error() {
+        let db = fresh_db();
+        let res = req(&db, r#"{"method":"foo"}"#);
+        assert!(res["error"].as_str().unwrap().contains("unknown method"));
+    }
+
+    #[test]
+    fn missing_method_returns_unknown() {
+        let db = fresh_db();
+        let res = req(&db, r#"{"params":{}}"#);
+        assert!(res["error"].as_str().unwrap().contains("unknown method"));
+    }
+
+    // --- reserve_range ---
+
+    #[test]
+    fn reserve_range_success() {
+        let db = fresh_db();
+        let res = req(&db, r#"{"method":"reserve_range","params":{"name":"test"}}"#);
+        assert_eq!(res["result"]["name"], "test");
+        let range = res["result"]["range"].as_array().unwrap();
+        assert_eq!(range[0], 4000);
+        assert_eq!(range[1], 4009);
+    }
+
+    #[test]
+    fn reserve_range_missing_name() {
+        let db = fresh_db();
+        let res = req(&db, r#"{"method":"reserve_range","params":{}}"#);
+        assert!(res["error"].as_str().unwrap().contains("missing params.name"));
+    }
+
+    #[test]
+    fn reserve_range_duplicate_name() {
+        let db = fresh_db();
+        req(&db, r#"{"method":"reserve_range","params":{"name":"test"}}"#);
+        let res = req(&db, r#"{"method":"reserve_range","params":{"name":"test"}}"#);
+        assert!(res["error"].is_string());
+    }
+
+    #[test]
+    fn reserve_range_sequential() {
+        let db = fresh_db();
+        req(&db, r#"{"method":"reserve_range","params":{"name":"alpha"}}"#);
+        let res = req(&db, r#"{"method":"reserve_range","params":{"name":"bravo"}}"#);
+        let range = res["result"]["range"].as_array().unwrap();
+        assert_eq!(range[0], 4010);
+    }
+
+    // --- register_port ---
+
+    #[test]
+    fn register_port_success() {
+        let db = fresh_db();
+        req(&db, r#"{"method":"reserve_range","params":{"name":"test"}}"#);
+        let res = req(
+            &db,
+            r#"{"method":"register_port","params":{"project":"test","service":"vite","port":4000}}"#,
+        );
+        assert_eq!(res["result"]["service"], "vite");
+        assert_eq!(res["result"]["port"], 4000);
+    }
+
+    #[test]
+    fn register_port_missing_params() {
+        let db = fresh_db();
+        let res = req(&db, r#"{"method":"register_port","params":{}}"#);
+        assert!(res["error"].as_str().unwrap().contains("missing"));
+    }
+
+    #[test]
+    fn register_port_unknown_project() {
+        let db = fresh_db();
+        let res = req(
+            &db,
+            r#"{"method":"register_port","params":{"project":"ghost","service":"vite","port":4000}}"#,
+        );
+        assert!(res["error"].as_str().unwrap().contains("not found"));
+    }
+
+    // --- list_all ---
+
+    #[test]
+    fn list_all_empty() {
+        let db = fresh_db();
+        let res = req(&db, r#"{"method":"list_all"}"#);
+        assert!(res["result"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn list_all_with_projects_and_ports() {
+        let db = fresh_db();
+        req(&db, r#"{"method":"reserve_range","params":{"name":"alpha"}}"#);
+        req(
+            &db,
+            r#"{"method":"register_port","params":{"project":"alpha","service":"vite","port":4000}}"#,
+        );
+        let res = req(&db, r#"{"method":"list_all"}"#);
+        let projects = res["result"].as_array().unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0]["name"], "alpha");
+        assert_eq!(projects[0]["ports"].as_array().unwrap().len(), 1);
+        assert_eq!(projects[0]["ports"][0]["service"], "vite");
+    }
+
+    // --- release_project ---
+
+    #[test]
+    fn release_project_success() {
+        let db = fresh_db();
+        req(&db, r#"{"method":"reserve_range","params":{"name":"test"}}"#);
+        let res = req(&db, r#"{"method":"release_project","params":{"name":"test"}}"#);
+        assert_eq!(res["result"], "ok");
+        // Verify it's gone
+        let list = req(&db, r#"{"method":"list_all"}"#);
+        assert!(list["result"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn release_project_not_found() {
+        let db = fresh_db();
+        let res = req(&db, r#"{"method":"release_project","params":{"name":"ghost"}}"#);
+        assert!(res["error"].as_str().unwrap().contains("not found"));
+    }
+
+    // --- Full workflow ---
+
+    #[test]
+    fn full_workflow_reserve_register_list_release() {
+        let db = fresh_db();
+
+        // Reserve
+        let res = req(&db, r#"{"method":"reserve_range","params":{"name":"myapp","path":"/tmp/myapp"}}"#);
+        assert_eq!(res["result"]["name"], "myapp");
+
+        // Register ports
+        req(
+            &db,
+            r#"{"method":"register_port","params":{"project":"myapp","service":"vite","port":4000}}"#,
+        );
+        req(
+            &db,
+            r#"{"method":"register_port","params":{"project":"myapp","service":"api","port":4001}}"#,
+        );
+
+        // List and verify
+        let res = req(&db, r#"{"method":"list_all"}"#);
+        let projects = res["result"].as_array().unwrap();
+        assert_eq!(projects[0]["ports"].as_array().unwrap().len(), 2);
+        assert_eq!(projects[0]["path"], "/tmp/myapp");
+
+        // Release
+        let res = req(&db, r#"{"method":"release_project","params":{"name":"myapp"}}"#);
+        assert_eq!(res["result"], "ok");
+
+        // Verify empty
+        let res = req(&db, r#"{"method":"list_all"}"#);
+        assert!(res["result"].as_array().unwrap().is_empty());
     }
 }

@@ -265,6 +265,50 @@ pub fn quit_app(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+pub fn get_mcp_dir(app: tauri::AppHandle) -> Result<String, String> {
+    let config_mcp = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("grimport")
+        .join("mcp");
+
+    // If already set up in config dir, return it
+    if config_mcp.join("server.py").exists() {
+        return Ok(config_mcp.to_string_lossy().to_string());
+    }
+
+    // Try to copy from bundled resources
+    let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
+    let bundled_mcp = resource_dir.join("mcp");
+
+    if bundled_mcp.join("server.py").exists() {
+        std::fs::create_dir_all(&config_mcp).map_err(|e| e.to_string())?;
+        for file in &["server.py", "pyproject.toml", "SKILL.md"] {
+            let src = bundled_mcp.join(file);
+            let dst = config_mcp.join(file);
+            if src.exists() {
+                std::fs::copy(&src, &dst).map_err(|e| e.to_string())?;
+            }
+        }
+        return Ok(config_mcp.to_string_lossy().to_string());
+    }
+
+    // Dev mode: resolve from executable location
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let dev_mcp = exe
+        .ancestors()
+        .find_map(|p| {
+            let candidate = p.join("mcp").join("server.py");
+            candidate.exists().then(|| p.join("mcp"))
+        });
+
+    if let Some(path) = dev_mcp {
+        return Ok(path.to_string_lossy().to_string());
+    }
+
+    Err("MCP server files not found".into())
+}
+
+#[tauri::command]
 pub fn check_mcp_installed() -> Result<bool, String> {
     let claude_json = dirs::home_dir()
         .ok_or("cannot find home dir")?

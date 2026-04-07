@@ -64,6 +64,10 @@ export function importData(sourcePath: string): Promise<void> {
   return invoke("import_data", { sourcePath });
 }
 
+export function getMcpDir(): Promise<string> {
+  return invoke("get_mcp_dir");
+}
+
 export function checkMcpInstalled(): Promise<boolean> {
   return invoke("check_mcp_installed");
 }

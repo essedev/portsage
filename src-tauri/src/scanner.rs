@@ -75,16 +75,19 @@ pub fn scan_unmanaged_ports(registered: &HashSet<i64>) -> Vec<ActivePort> {
         .collect()
 }
 
-fn parse_lsof_line(line: &str) -> Option<ActivePort> {
+/// Parse lsof fields without side effects. Returns (process_name, pid, port).
+fn parse_lsof_fields(line: &str) -> Option<(String, i64, i64)> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     let lsof_name = parts.first()?.to_string();
     let pid: i64 = parts.get(1)?.parse().ok()?;
     let name = parts.get(8)?;
     let port: i64 = name.rsplit(':').next()?.parse().ok()?;
+    Some((lsof_name, pid, port))
+}
 
-    // Resolve full process name via ps if lsof truncated it
+fn parse_lsof_line(line: &str) -> Option<ActivePort> {
+    let (lsof_name, pid, port) = parse_lsof_fields(line)?;
     let process = resolve_process_name(pid).unwrap_or(lsof_name);
-
     Some(ActivePort { port, process, pid })
 }
 
@@ -104,4 +107,117 @@ fn resolve_process_name(pid: i64) -> Option<String> {
             .unwrap_or(&full)
             .to_string(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Real lsof output lines from macOS
+    const LSOF_NODE: &str =
+        "node      12345 user   23u  IPv4 0x1234  0t0  TCP 127.0.0.1:3000 (LISTEN)";
+    const LSOF_POSTGRES: &str =
+        "postgres  6789  user   5u   IPv4 0xabcd  0t0  TCP *:5432 (LISTEN)";
+    const LSOF_IPV6: &str =
+        "node      11111 user   24u  IPv6 0x5678  0t0  TCP [::1]:8080 (LISTEN)";
+
+    #[test]
+    fn parse_standard_lsof_line() {
+        let (name, pid, port) = parse_lsof_fields(LSOF_NODE).unwrap();
+        assert_eq!(name, "node");
+        assert_eq!(pid, 12345);
+        assert_eq!(port, 3000);
+    }
+
+    #[test]
+    fn parse_wildcard_address() {
+        let (name, pid, port) = parse_lsof_fields(LSOF_POSTGRES).unwrap();
+        assert_eq!(name, "postgres");
+        assert_eq!(pid, 6789);
+        assert_eq!(port, 5432);
+    }
+
+    #[test]
+    fn parse_ipv6_address() {
+        let (name, pid, port) = parse_lsof_fields(LSOF_IPV6).unwrap();
+        assert_eq!(name, "node");
+        assert_eq!(pid, 11111);
+        assert_eq!(port, 8080);
+    }
+
+    #[test]
+    fn parse_empty_line_returns_none() {
+        assert!(parse_lsof_fields("").is_none());
+    }
+
+    #[test]
+    fn parse_header_line_returns_none() {
+        let header = "COMMAND   PID  USER   FD   TYPE   DEVICE SIZE/OFF NODE NAME";
+        assert!(parse_lsof_fields(header).is_none());
+    }
+
+    #[test]
+    fn parse_truncated_line_returns_none() {
+        assert!(parse_lsof_fields("node 123").is_none());
+    }
+
+    #[test]
+    fn blocked_processes_filters_system() {
+        let registered: HashSet<i64> = HashSet::new();
+        let active = vec![
+            ActivePort { port: 5000, process: "node".into(), pid: 1 },
+            ActivePort { port: 5001, process: "rapportd".into(), pid: 2 },
+            ActivePort { port: 5002, process: "mDNSResponder".into(), pid: 3 },
+        ];
+        let filtered: Vec<_> = active
+            .into_iter()
+            .filter(|p| {
+                p.port >= MIN_DEV_PORT
+                    && !registered.contains(&p.port)
+                    && !BLOCKED_PROCESSES.iter().any(|bp| p.process.eq_ignore_ascii_case(bp))
+            })
+            .collect();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].process, "node");
+    }
+
+    #[test]
+    fn registered_ports_excluded_from_unmanaged() {
+        let mut registered = HashSet::new();
+        registered.insert(5000);
+        let active = vec![
+            ActivePort { port: 5000, process: "node".into(), pid: 1 },
+            ActivePort { port: 5001, process: "node".into(), pid: 2 },
+        ];
+        let filtered: Vec<_> = active
+            .into_iter()
+            .filter(|p| {
+                p.port >= MIN_DEV_PORT
+                    && !registered.contains(&p.port)
+                    && !BLOCKED_PROCESSES.iter().any(|bp| p.process.eq_ignore_ascii_case(bp))
+            })
+            .collect();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].port, 5001);
+    }
+
+    #[test]
+    fn ports_below_min_excluded() {
+        let registered: HashSet<i64> = HashSet::new();
+        let active = vec![
+            ActivePort { port: 80, process: "nginx".into(), pid: 1 },
+            ActivePort { port: 443, process: "nginx".into(), pid: 2 },
+            ActivePort { port: 3000, process: "node".into(), pid: 3 },
+        ];
+        let filtered: Vec<_> = active
+            .into_iter()
+            .filter(|p| {
+                p.port >= MIN_DEV_PORT
+                    && !registered.contains(&p.port)
+                    && !BLOCKED_PROCESSES.iter().any(|bp| p.process.eq_ignore_ascii_case(bp))
+            })
+            .collect();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].port, 3000);
+    }
 }

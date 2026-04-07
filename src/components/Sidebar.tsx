@@ -154,7 +154,7 @@ export function Sidebar({
             onClick={onShowSettings}
           >
             <Plug size={14} />
-            Connetti a Claude Code
+            Configura MCP
           </GrimButton>
         )}
         <GrimButton

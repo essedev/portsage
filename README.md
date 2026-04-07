@@ -10,7 +10,7 @@ Lavorare con AI su 4-5 progetti in parallelo (React/Vite + Docker con PostgreSQL
 
 - **Popover dalla menubar**: quick view compatta per controllare lo stato delle porte
 - **Finestra app full**: gestione completa di progetti, porte, settings
-- **MCP server**: Claude Code riserva porte e registra servizi automaticamente
+- **MCP server**: integrazione con qualsiasi editor MCP-compatibile (Claude Code, Cursor, Windsurf, VS Code, Claude Desktop, Continue, Cline, Codex, Zed) per riservare porte e registrare servizi automaticamente
 - **Porte non gestite**: rileva porte attive non associate a nessun progetto
 
 ## Installazione
@@ -38,7 +38,7 @@ cd mcp && uv sync && cd ..    # dipendenze MCP
 pnpm tauri dev                # dev mode (hot reload)
 ```
 
-## Integrazione con Claude Code
+## Integrazione MCP
 
 Il MCP server espone 5 tool:
 - `list_all` - registry completo + stato porte
@@ -47,7 +47,9 @@ Il MCP server espone 5 tool:
 - `release_project(project_name)` - libera range
 - `scan_active` - porte attive sulla macchina
 
-Installazione dall'app (Impostazioni > "Connetti a Claude Code") o da terminale (`mcp/install.sh`).
+**Claude Code**: installazione automatica dall'app (Impostazioni > "Configura MCP" > Claude Code) o da terminale (`mcp/install.sh`).
+
+**Altri editor** (Cursor, Windsurf, VS Code Copilot, Claude Desktop, Continue, Cline, Codex, Zed): l'app genera la config gia' pronta per l'editor scelto, con bottone di copia. Vai in Impostazioni > "Configura MCP" > "Altri editor", seleziona l'editor e incolla la config nel file indicato.
 
 ## Link
 

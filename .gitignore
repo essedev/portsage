@@ -19,6 +19,9 @@ src-tauri/target/
 mcp/.venv/
 __pycache__/
 
+# Logo work files
+logo-candidates/
+
 # Editor directories and files
 .vscode
 .idea
