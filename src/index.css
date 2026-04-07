@@ -47,7 +47,7 @@
 
 html, body {
   margin: 0;
-  background: var(--color-bg-deep);
+  background: transparent;
   color: var(--color-text-primary);
   font-family: var(--font-sans);
   font-size: 13px;
