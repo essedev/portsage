@@ -1,6 +1,6 @@
 cask "grimport" do
   version "0.5.2"
-  sha256 "PLACEHOLDER"
+  sha256 "f1e324a2dc44461adff099345a0a73279c0cce2280ffae9229da61310075af6e"
 
   url "https://github.com/essedev/grimport/releases/download/v#{version}/Grimport_#{version}_aarch64.dmg"
   name "Grimport"
