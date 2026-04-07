@@ -1,22 +1,22 @@
-# grimport - Convenzioni progetto
+# Portsage - Project conventions
 
-## Panoramica
+## Overview
 
-Menubar app macOS per gestione allocazione porte tra progetti. Vedi PROJECT.md per architettura, DESIGN.md per design system, ROADMAP.md per roadmap.
+A macOS menubar app for managing port allocation across projects. See PROJECT.md for the architecture, DESIGN.md for the design system, ROADMAP.md for the roadmap.
 
-## Comandi
+## Commands
 
-- `pnpm tauri dev` - avvia app in dev
-- `pnpm dev` - solo frontend (Vite)
-- `pnpm build` - build frontend
-- `pnpm tauri build` - build app completa (.dmg)
+- `pnpm tauri dev` - run the app in dev mode
+- `pnpm dev` - frontend only (Vite)
+- `pnpm build` - build the frontend
+- `pnpm tauri build` - build the full app (.dmg)
 
-## Struttura
+## Structure
 
 ```
 src/
   components/
-    ui/               # Primitivi (GrimCard, GrimButton, GrimSelect, etc.)
+    ui/               # Primitives (GrimCard, GrimButton, GrimSelect, etc.)
     PortRow.tsx
     ProjectCard.tsx
     ProjectDetail.tsx
@@ -31,56 +31,56 @@ src/
   features/
     projects/         # useProjects hook
   lib/
-    commands.ts       # Wrapper Tauri invoke commands
+    commands.ts       # Tauri invoke command wrappers
     types.ts          # TypeScript types (ProjectStatus, PortStatus, etc.)
-  App.tsx             # Routing finestra main vs popover
+  App.tsx             # Routing for main window vs popover
   main.tsx
-  index.css           # Token CSS custom (@theme Tailwind v4)
+  index.css           # CSS custom tokens (@theme Tailwind v4)
 src-tauri/
   src/
-    lib.rs            # Entry point Tauri, tray icon, popover logic
+    lib.rs            # Tauri entry point, tray icon, popover logic
     db.rs             # SQLite setup, migrations, CRUD
-    commands.rs       # Tauri commands (IPC frontend-backend)
+    commands.rs       # Tauri commands (frontend-backend IPC)
     scanner.rs        # Port scanner (lsof + ps), unmanaged ports, blocklist
-    socket.rs         # Unix socket server per MCP
+    socket.rs         # Unix socket server for the MCP
   capabilities/
-    default.json      # Permissions per plugins (dialog, autostart, opener)
-  tauri.conf.json     # Config app, finestre, tray icon, bundle
+    default.json      # Plugin permissions (dialog, autostart, opener)
+  tauri.conf.json     # App config, windows, tray icon, bundle
 mcp/
-  server.py           # MCP server Python (thin client via stdio)
-  SKILL.md            # Skill file per Claude Code
-  install.sh          # Script installazione da terminale
-  pyproject.toml      # Dipendenze Python
+  server.py           # Python MCP server (thin client via stdio)
+  SKILL.md            # Claude Code skill file
+  install.sh          # Terminal install script
+  pyproject.toml      # Python dependencies
 homebrew/
-  grimport.rb         # Homebrew cask template
+  portsage.rb         # Homebrew cask template
 ```
 
-## Regole
+## Rules
 
 ### Frontend
-- Tutti i colori via CSS token definiti in DESIGN.md, mai hardcoded
-- Spacing solo con i token --space-N, border-radius con --radius-*
-- Componenti `Grim*` in `src/components/ui/`, composti in `src/components/`
-- Dipendenza unidirezionale: primitivi <- composti. I `Grim*` non importano composti
-- Props tipizzate con interface nello stesso file del componente
-- Tailwind v4: CSS-first config con @theme, niente tailwind.config.ts
-- Font: system-ui (UI), ui-monospace (titoli/dati tecnici)
-- Import alias: `@/` per import assoluti
-- Dropdown custom (GrimSelect), mai select nativo
+- All colors via the CSS tokens defined in DESIGN.md, never hardcoded
+- Spacing only via the --space-N tokens, border-radius via --radius-*
+- `Grim*` components in `src/components/ui/`, composed in `src/components/`
+- One-way dependency: primitives <- composed. `Grim*` never imports composed
+- Props typed with an interface in the same component file
+- Tailwind v4: CSS-first config with @theme, no tailwind.config.ts
+- Font: system-ui (UI), ui-monospace (titles/technical data)
+- Import alias: `@/` for absolute imports
+- Custom dropdown (GrimSelect), never the native select
 
 ### Rust backend
-- Tutto il DB access in db.rs, esposto ai frontend via commands.rs
-- Port scanning in scanner.rs, non mischiare con logica DB
-- Unix socket in socket.rs, gestisce richieste MCP
-- Database condiviso via Arc<Database> tra Tauri state e socket server
-- Errori tipizzati, no unwrap() in produzione
+- All DB access in db.rs, exposed to the frontend via commands.rs
+- Port scanning in scanner.rs, do not mix with DB logic
+- Unix socket in socket.rs, handles MCP requests
+- Database shared via Arc<Database> between Tauri state and the socket server
+- Typed errors, no unwrap() in production
 
 ### MCP server
-- Thin client: nessun accesso diretto al DB
-- Comunica solo via Unix socket con il Rust backend
-- Trasporto stdio per integrazione con Claude Code
+- Thin client: no direct DB access
+- Talks only via the Unix socket to the Rust backend
+- stdio transport for Claude Code integration
 
-### Generali
-- Codice in inglese, UI in italiano
-- Line length: 100 caratteri
-- pnpm per frontend, uv per Python
+### General
+- Code in English, UI in English (Italian translation tracked separately)
+- Line length: 100 characters
+- pnpm for the frontend, uv for Python

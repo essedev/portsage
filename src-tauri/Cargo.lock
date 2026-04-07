@@ -1439,23 +1439,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "grimport"
-version = "0.1.0"
-dependencies = [
- "dirs 6.0.0",
- "rusqlite",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "tokio",
- "zip",
-]
-
-[[package]]
 name = "gtk"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2765,6 +2748,23 @@ dependencies = [
  "pin-project-lite",
  "rustix",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "portsage"
+version = "0.1.0"
+dependencies = [
+ "dirs 6.0.0",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "tokio",
+ "zip",
 ]
 
 [[package]]

@@ -39,7 +39,7 @@ export function AddPortForm({
     return (
       <div className="bg-bg-elevated rounded-[var(--radius-md)] p-[var(--spacing-3)]">
         <GrimText variant="body" className="text-text-muted">
-          Tutte le porte del range sono occupate
+          All ports in the range are taken
         </GrimText>
       </div>
     );
@@ -52,15 +52,15 @@ export function AddPortForm({
     >
       <div className="flex gap-[var(--spacing-2)] items-end">
         <GrimInput
-          label="Servizio"
-          placeholder="es. vite, postgres"
+          label="Service"
+          placeholder="e.g. vite, postgres"
           value={service}
           onChange={(e) => setService(e.target.value)}
           wrapperClassName="w-48"
           autoFocus
         />
         <GrimSelect
-          label="Porta"
+          label="Port"
           value={port}
           onChange={setPort}
           className="w-24"
@@ -72,14 +72,14 @@ export function AddPortForm({
       </div>
       <div className="flex justify-end gap-[var(--spacing-2)]">
         <GrimButton variant="ghost" type="button" onClick={onCancel}>
-          Annulla
+          Cancel
         </GrimButton>
         <GrimButton
           variant="primary"
           type="submit"
           disabled={!service.trim()}
         >
-          Aggiungi
+          Add
         </GrimButton>
       </div>
     </form>

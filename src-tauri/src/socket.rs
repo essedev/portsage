@@ -9,8 +9,8 @@ use tokio::net::UnixListener;
 fn socket_path() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("grimport")
-        .join("grimport.sock")
+        .join("portsage")
+        .join("portsage.sock")
 }
 
 pub fn start_socket_server(db: Arc<Database>) {

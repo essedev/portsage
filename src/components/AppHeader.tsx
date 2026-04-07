@@ -27,14 +27,14 @@ export function AppHeader({ projects }: AppHeaderProps) {
           className="select-none -mt-1"
           style={{ textShadow: "0 0 12px var(--color-accent-amber-glow)" }}
         >
-          grimport
+          portsage
         </GrimText>
         <GrimText variant="label" className="text-text-muted select-none">
-          your port grimoire
+          your port sage
         </GrimText>
       </div>
       {totalActive > 0 && (
-        <GrimBadge variant="active">{totalActive} attive</GrimBadge>
+        <GrimBadge variant="active">{totalActive} active</GrimBadge>
       )}
     </header>
   );

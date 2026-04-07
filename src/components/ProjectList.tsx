@@ -33,7 +33,7 @@ export function ProjectList({
       <div className="flex flex-col gap-[var(--spacing-2)] overflow-y-auto">
         {filtered.length === 0 && (
           <p className="text-text-muted text-[13px] text-center py-[var(--spacing-4)]">
-            Nessun progetto trovato
+            No projects found
           </p>
         )}
         {filtered.map((project) => (

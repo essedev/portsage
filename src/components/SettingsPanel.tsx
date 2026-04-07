@@ -8,6 +8,7 @@ import { GrimSelect } from "@/components/ui/GrimSelect";
 import { CheckCircle, XCircle, Download, Upload, Trash2, Save, Copy, Check } from "lucide-react";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { getVersion } from "@tauri-apps/api/app";
 import * as cmd from "@/lib/commands";
 import skillMd from "../../mcp/SKILL.md?raw";
 
@@ -16,32 +17,38 @@ type McpClient = {
   label: string;
   configPath: string;
   rulesPath: string | null;
-  format: "mcpServers" | "contextServers" | "toml";
+  // mcpServers: Cursor, Claude Desktop, Cline, Windsurf - root key {"mcpServers": {...}}
+  // vscodeServers: VS Code Copilot - root key {"servers": {...}}
+  // toml: Codex - [mcp_servers.name] sections
+  format: "mcpServers" | "vscodeServers" | "toml";
+  // Frontmatter wrapper used when generating the rules file content. null = no rules support.
+  rulesFormat?: "cursor" | "windsurf";
 };
 
-// Ordered by user-base popularity (rough). Update as the ecosystem shifts.
+// Ordered by actual MCP usage relevance (not just editor user base).
+// Removed: Continue (declining, surclassed by Cline), Zed (too niche).
+// Update as the ecosystem shifts.
 const MCP_CLIENTS: McpClient[] = [
-  { value: "cursor", label: "Cursor", configPath: "~/.cursor/mcp.json", rulesPath: ".cursorrules", format: "mcpServers" },
-  { value: "vscode", label: "VS Code (Copilot)", configPath: ".vscode/mcp.json", rulesPath: null, format: "mcpServers" },
+  { value: "cursor", label: "Cursor", configPath: "~/.cursor/mcp.json", rulesPath: ".cursor/rules/portsage.mdc", rulesFormat: "cursor", format: "mcpServers" },
   { value: "claude-desktop", label: "Claude Desktop", configPath: "~/Library/Application Support/Claude/claude_desktop_config.json", rulesPath: null, format: "mcpServers" },
   { value: "cline", label: "Cline (VS Code)", configPath: "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json", rulesPath: null, format: "mcpServers" },
-  { value: "windsurf", label: "Windsurf", configPath: "~/.codeium/windsurf/mcp_config.json", rulesPath: ".windsurfrules", format: "mcpServers" },
-  { value: "continue", label: "Continue", configPath: "~/.continue/config.json", rulesPath: null, format: "mcpServers" },
+  { value: "vscode", label: "VS Code (Copilot)", configPath: ".vscode/mcp.json", rulesPath: null, format: "vscodeServers" },
   { value: "codex", label: "Codex (OpenAI)", configPath: "~/.codex/config.toml", rulesPath: null, format: "toml" },
-  { value: "zed", label: "Zed", configPath: "~/.config/zed/settings.json", rulesPath: null, format: "contextServers" },
+  { value: "windsurf", label: "Windsurf", configPath: "~/.codeium/windsurf/mcp_config.json", rulesPath: ".windsurf/rules/portsage.md", rulesFormat: "windsurf", format: "mcpServers" },
 ];
 
 function generateMcpConfig(client: McpClient, mcpDir: string): string {
   if (client.format === "toml") {
-    return `[mcp_servers.grimport]
+    return `[mcp_servers.portsage]
 command = "uv"
 args = ["--directory", "${mcpDir}", "run", "python", "server.py"]`;
   }
 
-  const key = client.format === "contextServers" ? "context_servers" : "mcpServers";
+  // VS Code Copilot uses "servers" as the root key, all others use "mcpServers".
+  const key = client.format === "vscodeServers" ? "servers" : "mcpServers";
   const obj = {
     [key]: {
-      grimport: {
+      portsage: {
         command: "uv",
         args: ["--directory", mcpDir, "run", "python", "server.py"],
       },
@@ -51,8 +58,37 @@ args = ["--directory", "${mcpDir}", "run", "python", "server.py"]`;
 }
 
 // Source of truth: mcp/SKILL.md - imported raw at build time so it stays in sync.
-// Strip the YAML frontmatter (between --- markers at top) for display.
-const SKILL_INSTRUCTIONS = skillMd.replace(/^---\n[\s\S]*?\n---\n+/, "");
+// Strip the YAML frontmatter (between --- markers at top) so we can re-wrap with the
+// editor-specific frontmatter that each rules format requires.
+const SKILL_BODY = skillMd.replace(/^---\n[\s\S]*?\n---\n+/, "");
+
+const SKILL_DESCRIPTION =
+  "Manages port allocation across development projects. Use it when you need to assign ports to a new project, register services, or check which ports are in use.";
+
+function generateRulesContent(client: McpClient): string {
+  // Cursor .mdc: agent-mode rule (description present, no globs, alwaysApply false).
+  // The AI decides when to attach the rule based on the description.
+  if (client.rulesFormat === "cursor") {
+    return `---
+description: ${SKILL_DESCRIPTION}
+alwaysApply: false
+---
+
+${SKILL_BODY}`;
+  }
+  // Windsurf .md: model_decision trigger - the model attaches the rule when the
+  // description matches the current task context.
+  if (client.rulesFormat === "windsurf") {
+    return `---
+trigger: model_decision
+description: ${SKILL_DESCRIPTION}
+---
+
+${SKILL_BODY}`;
+  }
+  // Fallback: raw markdown body, no frontmatter.
+  return SKILL_BODY;
+}
 
 function CodeBlock({ code, label }: { code: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -74,7 +110,7 @@ function CodeBlock({ code, label }: { code: string; label: string }) {
         >
           {copied ? <Check size={12} /> : <Copy size={12} />}
           <GrimText variant="mono" className="text-[10px]!">
-            {copied ? "Copiato" : "Copia"}
+            {copied ? "Copied" : "Copy"}
           </GrimText>
         </button>
       </div>
@@ -96,6 +132,7 @@ export function SettingsPanel() {
   const [autostart, setAutostart] = useState(false);
   const [mcpDir, setMcpDir] = useState("");
   const [selectedClient, setSelectedClient] = useState("cursor");
+  const [version, setVersion] = useState("");
 
   const checkMcp = async () => {
     try {
@@ -121,6 +158,7 @@ export function SettingsPanel() {
     loadConfig();
     isEnabled().then(setAutostart).catch(() => {});
     cmd.getMcpDir().then(setMcpDir).catch(() => {});
+    getVersion().then(setVersion).catch(() => {});
   }, []);
 
   const handleInstall = async () => {
@@ -164,8 +202,8 @@ export function SettingsPanel() {
   const handleExport = async () => {
     try {
       const path = await save({
-        defaultPath: "grimport-backup.grimport",
-        filters: [{ name: "Grimport", extensions: ["grimport"] }],
+        defaultPath: "portsage-backup.portsage",
+        filters: [{ name: "Portsage", extensions: ["portsage"] }],
       });
       if (path) {
         await cmd.exportData(path);
@@ -178,7 +216,7 @@ export function SettingsPanel() {
   const handleImport = async () => {
     try {
       const path = await open({
-        filters: [{ name: "Grimport", extensions: ["grimport"] }],
+        filters: [{ name: "Portsage", extensions: ["portsage"] }],
         multiple: false,
       });
       if (path) {
@@ -204,7 +242,7 @@ export function SettingsPanel() {
   return (
     <div className="flex flex-col gap-[var(--spacing-6)] p-[var(--spacing-5)]">
       <GrimText variant="title" as="h2">
-        Impostazioni
+        Settings
       </GrimText>
 
       <GrimDivider />
@@ -212,7 +250,7 @@ export function SettingsPanel() {
       {/* Port Config Section */}
       <div className="flex flex-col gap-[var(--spacing-3)]">
         <GrimText variant="section" as="h3">
-          Configurazione porte
+          Port configuration
         </GrimText>
 
         <label className="inline-flex items-center gap-[var(--spacing-2)] cursor-pointer w-fit">
@@ -236,29 +274,29 @@ export function SettingsPanel() {
               `}
             />
           </button>
-          <GrimText variant="body">Avvio automatico al login</GrimText>
+          <GrimText variant="body">Launch at login</GrimText>
         </label>
 
         <GrimDivider />
 
         <GrimText variant="section" as="h3">
-          Range porte
+          Port range
         </GrimText>
 
         <GrimText variant="body" className="text-text-secondary">
-          Modifica influenza solo i nuovi progetti. I range gia' assegnati non cambiano.
+          Changes only affect new projects. Already assigned ranges stay the same.
         </GrimText>
 
         <div className="flex items-end gap-[var(--spacing-3)]">
           <GrimInput
-            label="Porta base"
+            label="Base port"
             type="number"
             value={basePort}
             onChange={(e) => setBasePort(e.target.value)}
             wrapperClassName="w-32"
           />
           <GrimInput
-            label="Dimensione range"
+            label="Range size"
             type="number"
             value={rangeSize}
             onChange={(e) => setRangeSize(e.target.value)}
@@ -266,7 +304,7 @@ export function SettingsPanel() {
           />
           <GrimButton variant="primary" onClick={handleSaveConfig}>
             <Save size={14} />
-            {configSaved ? "Salvato" : "Salva"}
+            {configSaved ? "Saved" : "Save"}
           </GrimButton>
         </div>
       </div>
@@ -276,7 +314,7 @@ export function SettingsPanel() {
       {/* MCP Section */}
       <div className="flex flex-col gap-[var(--spacing-3)]">
         <GrimText variant="section" as="h3">
-          Integrazione MCP
+          MCP integration
         </GrimText>
 
         {/* Claude Code - Auto Install */}
@@ -285,24 +323,24 @@ export function SettingsPanel() {
           <div className="flex items-center gap-[var(--spacing-3)]">
             {mcpInstalled === null ? (
               <GrimText variant="body" className="text-text-muted">
-                Verifica in corso...
+                Checking...
               </GrimText>
             ) : mcpInstalled ? (
               <>
                 <GrimBadge variant="active">
                   <CheckCircle size={12} />
-                  Connesso
+                  Connected
                 </GrimBadge>
                 <GrimButton variant="danger" onClick={handleUninstall}>
                   <Trash2 size={14} />
-                  Rimuovi
+                  Remove
                 </GrimButton>
               </>
             ) : (
               <>
                 <GrimBadge variant="inactive">
                   <XCircle size={12} />
-                  Non connesso
+                  Not connected
                 </GrimBadge>
                 <GrimButton
                   variant="primary"
@@ -310,7 +348,7 @@ export function SettingsPanel() {
                   disabled={installing}
                 >
                   <Download size={14} />
-                  {installing ? "Connessione..." : "Connetti"}
+                  {installing ? "Connecting..." : "Connect"}
                 </GrimButton>
               </>
             )}
@@ -318,13 +356,13 @@ export function SettingsPanel() {
 
           <GrimText variant="body" className="text-text-secondary">
             {mcpInstalled
-              ? "Claude Code puo' gestire le porte dei tuoi progetti automaticamente. Riavvia Claude Code se hai appena connesso."
-              : "Connetti a Claude Code per riservare porte e registrare servizi automaticamente."}
+              ? "Claude Code can now manage your project ports automatically. Restart Claude Code if you just connected."
+              : "Connect to Claude Code to reserve ports and register services automatically."}
           </GrimText>
 
           {mcpInstalled && (
             <div className="flex flex-col gap-[var(--spacing-1)] bg-bg-surface rounded-[var(--radius-md)] p-[var(--spacing-3)]">
-              <GrimText variant="label">Tool disponibili</GrimText>
+              <GrimText variant="label">Available tools</GrimText>
               <div className="flex flex-wrap gap-[var(--spacing-1)]">
                 {["list_all", "reserve_range", "register_port", "release_project", "scan_active"].map(
                   (tool) => (
@@ -344,10 +382,10 @@ export function SettingsPanel() {
 
         {/* Other Editors - Manual Config */}
         <div className="flex flex-col gap-[var(--spacing-2)]">
-          <GrimText variant="label">Altri editor</GrimText>
+          <GrimText variant="label">Other editors</GrimText>
 
           <GrimSelect
-            label="Seleziona editor"
+            label="Select editor"
             options={MCP_CLIENTS.map((c) => ({ value: c.value, label: c.label }))}
             value={selectedClient}
             onChange={setSelectedClient}
@@ -357,28 +395,28 @@ export function SettingsPanel() {
             const client = MCP_CLIENTS.find((c) => c.value === selectedClient);
             if (!client) return null;
             const configCode = generateMcpConfig(client, mcpDir);
-            const configLabel = client.format === "toml" ? "Config MCP (TOML)" : "Config MCP";
+            const configLabel = client.format === "toml" ? "MCP config (TOML)" : "MCP config";
 
             return (
               <div className="flex flex-col gap-[var(--spacing-3)]">
                 <CodeBlock code={configCode} label={configLabel} />
 
                 <GrimText variant="body" className="text-text-secondary">
-                  Incolla il config in <GrimText variant="mono" className="text-[11px]!">{client.configPath}</GrimText>
+                  Paste the config into <GrimText variant="mono" className="text-[11px]!">{client.configPath}</GrimText>
                 </GrimText>
 
                 {client.rulesPath && (
-                  <CodeBlock code={SKILL_INSTRUCTIONS} label={`Istruzioni per ${client.label}`} />
+                  <CodeBlock code={generateRulesContent(client)} label={`Instructions for ${client.label}`} />
                 )}
 
                 {client.rulesPath && (
                   <GrimText variant="body" className="text-text-secondary">
-                    Incolla le istruzioni nel file <GrimText variant="mono" className="text-[11px]!">{client.rulesPath}</GrimText> nella root del tuo progetto.
+                    Paste the instructions into the file <GrimText variant="mono" className="text-[11px]!">{client.rulesPath}</GrimText> at the root of your project.
                   </GrimText>
                 )}
 
                 <GrimText variant="body" className="text-text-muted text-[11px]!">
-                  L'app Grimport deve essere in esecuzione per usare i tool MCP.
+                  Portsage must be running to use the MCP tools.
                 </GrimText>
               </div>
             );
@@ -391,24 +429,32 @@ export function SettingsPanel() {
       {/* Export/Import Section */}
       <div className="flex flex-col gap-[var(--spacing-3)]">
         <GrimText variant="section" as="h3">
-          Dati
+          Data
         </GrimText>
 
         <GrimText variant="body" className="text-text-secondary">
-          Esporta o importa il database e le preferenze per backup o migrazione.
+          Export or import the database and preferences for backup or migration.
         </GrimText>
 
         <div className="flex gap-[var(--spacing-2)]">
           <GrimButton variant="ghost" onClick={handleExport}>
             <Download size={14} />
-            Esporta
+            Export
           </GrimButton>
           <GrimButton variant="ghost" onClick={handleImport}>
             <Upload size={14} />
-            Importa
+            Import
           </GrimButton>
         </div>
       </div>
+
+      {version && (
+        <div className="flex justify-end pt-[var(--spacing-2)]">
+          <GrimText variant="mono" className="text-[10px]! text-text-muted">
+            v{version}
+          </GrimText>
+        </div>
+      )}
     </div>
   );
 }

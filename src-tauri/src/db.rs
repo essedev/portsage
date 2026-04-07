@@ -60,8 +60,8 @@ impl Database {
     fn db_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("grimport")
-            .join("grimport.db")
+            .join("portsage")
+            .join("portsage.db")
     }
 
     fn migrate(&self) -> Result<()> {

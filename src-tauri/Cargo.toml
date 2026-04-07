@@ -1,12 +1,12 @@
 [package]
-name = "grimport"
+name = "portsage"
 version = "0.1.0"
 description = "Port allocation manager for macOS"
 authors = ["Simone Salerno"]
 edition = "2021"
 
 [lib]
-name = "grimport_lib"
+name = "portsage_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

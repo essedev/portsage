@@ -1,47 +1,47 @@
 ---
-name: grimport
+name: portsage
 description: >
-  Gestisce l'allocazione delle porte tra progetti di sviluppo.
-  Usa quando devi assegnare porte a un nuovo progetto, registrare servizi,
-  o verificare quali porte sono in uso.
+  Manages port allocation across development projects.
+  Use it when you need to assign ports to a new project, register services,
+  or check which ports are in use.
 ---
 
-# Grimport - Port Allocation Manager
+# Portsage - Port Allocation Manager
 
-Accesso al database locale delle porte tramite l'app Grimport.
+Access to the local port database via the Portsage app.
 
-## Tool disponibili
+## Available tools
 
 ### list_all
-Mostra tutti i progetti registrati con range porte, servizi e stato attivo.
-Usa come primo passo per capire la situazione attuale.
+Shows all registered projects with their port range, services, and active state.
+Use this as the first step to understand the current situation.
 
 ### reserve_range
-Riserva il prossimo range di porte libero per un nuovo progetto.
-- `project_name`: nome del progetto (es. "my-app")
-- `path`: path opzionale alla directory del progetto
+Reserves the next free port range for a new project.
+- `project_name`: project name (e.g. "my-app")
+- `path`: optional path to the project directory
 
 ### register_port
-Registra una porta specifica per un servizio dentro il range di un progetto.
-- `project_name`: nome del progetto
-- `service`: nome del servizio (es. "vite", "postgres", "redis", "minio")
-- `port`: numero porta (deve essere nel range del progetto)
+Registers a specific port for a service inside a project's range.
+- `project_name`: project name
+- `service`: service name (e.g. "vite", "postgres", "redis", "minio")
+- `port`: port number (must be inside the project's range)
 
 ### release_project
-Libera il range di porte di un progetto.
-- `project_name`: nome del progetto da liberare
+Releases a project's port range.
+- `project_name`: name of the project to release
 
 ### scan_active
-Scanna tutte le porte TCP attive sulla macchina.
+Scans all active TCP ports on the machine.
 
-## Workflow consigliato
+## Recommended workflow
 
-Quando assegni porte a un nuovo progetto:
-1. Chiama `list_all` per vedere i range occupati
-2. Chiama `reserve_range` con il nome del progetto
-3. Usa le porte del range assegnato nel docker-compose.yml e vite.config
-4. Chiama `register_port` per ogni servizio configurato
+When assigning ports to a new project:
+1. Call `list_all` to see which ranges are taken
+2. Call `reserve_range` with the project name
+3. Use the assigned range's ports in docker-compose.yml and vite.config
+4. Call `register_port` for each configured service
 
-Quando verifichi conflitti:
-1. Chiama `scan_active` per vedere le porte attive
-2. Chiama `list_all` per incrociare con le porte registrate
+When checking conflicts:
+1. Call `scan_active` to see active ports
+2. Call `list_all` to cross-reference with registered ports

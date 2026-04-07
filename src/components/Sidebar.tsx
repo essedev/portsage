@@ -62,7 +62,7 @@ export function Sidebar({
           onClick={() => setShowAdd(!showAdd)}
         >
           <Plus size={16} />
-          Nuovo progetto
+          New project
         </GrimButton>
       </div>
 
@@ -137,7 +137,7 @@ export function Sidebar({
                   variant="body"
                   className={`text-[12px] ${activeView === "unmanaged" ? "text-accent-amber!" : "text-text-secondary!"}`}
                 >
-                  Non gestite
+                  Unmanaged
                 </GrimText>
               </div>
               <GrimBadge variant="inactive">{unmanagedPorts.length}</GrimBadge>
@@ -154,7 +154,7 @@ export function Sidebar({
             onClick={onShowSettings}
           >
             <Plug size={14} />
-            Configura MCP
+            Configure MCP
           </GrimButton>
         )}
         <GrimButton
@@ -163,7 +163,7 @@ export function Sidebar({
           onClick={onShowSettings}
         >
           <Settings size={14} />
-          Impostazioni
+          Settings
         </GrimButton>
       </div>
     </aside>

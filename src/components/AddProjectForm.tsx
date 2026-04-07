@@ -24,24 +24,24 @@ export function AddProjectForm({ onSubmit, onCancel }: AddProjectFormProps) {
       className="flex flex-col gap-[var(--spacing-2)] p-[var(--spacing-3)]"
     >
       <GrimInput
-        label="Nome progetto"
-        placeholder="es. my-project"
+        label="Project name"
+        placeholder="e.g. my-project"
         value={name}
         onChange={(e) => setName(e.target.value)}
         autoFocus
       />
       <GrimInput
-        label="Path (opzionale)"
+        label="Path (optional)"
         placeholder="/Users/.../project"
         value={path}
         onChange={(e) => setPath(e.target.value)}
       />
       <div className="flex justify-end gap-[var(--spacing-2)]">
         <GrimButton variant="ghost" type="button" onClick={onCancel}>
-          Annulla
+          Cancel
         </GrimButton>
         <GrimButton variant="primary" type="submit">
-          Crea progetto
+          Create project
         </GrimButton>
       </div>
     </form>

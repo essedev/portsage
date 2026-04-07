@@ -1,28 +1,30 @@
-# Grimport
+# Portsage
 
-Menubar app per macOS che gestisce l'allocazione delle porte tra progetti di sviluppo.
+> 🇮🇹 [Leggi in italiano](README.it.md)
 
-## Problema
+A macOS menubar app that manages port allocation across development projects.
 
-Lavorare con AI su 4-5 progetti in parallelo (React/Vite + Docker con PostgreSQL, Redis, Minio) causa collisioni di porte continue. Non esiste un modo semplice per vedere quali porte sono occupate, da quale progetto, e quali range sono liberi.
+## The problem
 
-## Soluzione
+Working with AI on 4-5 projects in parallel (React/Vite + Docker with PostgreSQL, Redis, S3) constantly causes port collisions. There is no simple way to see which ports are taken, by which project, and which ranges are still free.
 
-- **Popover dalla menubar**: quick view compatta per controllare lo stato delle porte
-- **Finestra app full**: gestione completa di progetti, porte, settings
-- **MCP server**: integrazione con qualsiasi editor MCP-compatibile (Claude Code, Cursor, Windsurf, VS Code, Claude Desktop, Continue, Cline, Codex, Zed) per riservare porte e registrare servizi automaticamente
-- **Porte non gestite**: rileva porte attive non associate a nessun progetto
+## The solution
 
-## Installazione
+- **Menubar popover**: compact quick view to check the state of your ports
+- **Full app window**: full management of projects, ports, and settings
+- **MCP server**: integration with any MCP-compatible editor (Claude Code, Cursor, Claude Desktop, Cline, VS Code Copilot, Codex, Windsurf) to reserve ports and register services automatically
+- **Unmanaged ports**: detects active ports that are not associated with any project
+
+## Installation
 
 ### Homebrew
 
 ```bash
-brew tap essedev/grimport
-brew install grimport
+brew tap essedev/portsage
+brew install portsage
 ```
 
-### Da sorgente
+### From source
 
 ```bash
 pnpm install
@@ -30,28 +32,48 @@ cd mcp && uv sync && cd ..
 pnpm tauri build
 ```
 
-## Sviluppo
+## Development
 
 ```bash
-pnpm install                  # dipendenze frontend
-cd mcp && uv sync && cd ..    # dipendenze MCP
+pnpm install                  # frontend dependencies
+cd mcp && uv sync && cd ..    # MCP dependencies
 pnpm tauri dev                # dev mode (hot reload)
 ```
 
-## Integrazione MCP
+## MCP integration
 
-Il MCP server espone 5 tool:
-- `list_all` - registry completo + stato porte
-- `reserve_range(project_name)` - riserva prossimo range libero
-- `register_port(project_name, service, port)` - registra porta
-- `release_project(project_name)` - libera range
-- `scan_active` - porte attive sulla macchina
+The MCP server exposes 5 tools:
+- `list_all` - full registry plus port status
+- `reserve_range(project_name)` - reserves the next free range
+- `register_port(project_name, service, port)` - registers a port
+- `release_project(project_name)` - releases a range
+- `scan_active` - active ports on the machine
 
-**Claude Code**: installazione automatica dall'app (Impostazioni > "Configura MCP" > Claude Code) o da terminale (`mcp/install.sh`).
+**Claude Code**: automatic install from the app (Settings > "Configure MCP" > Claude Code) or from terminal (`mcp/install.sh`).
 
-**Altri editor** (Cursor, Windsurf, VS Code Copilot, Claude Desktop, Continue, Cline, Codex, Zed): l'app genera la config gia' pronta per l'editor scelto, con bottone di copia. Vai in Impostazioni > "Configura MCP" > "Altri editor", seleziona l'editor e incolla la config nel file indicato.
+**Other editors** (Cursor, Claude Desktop, Cline, VS Code Copilot, Codex, Windsurf): the app generates the config ready for the chosen editor with a copy button. Go to Settings > "Configure MCP" > "Other editors", pick your editor, and paste the config into the indicated file.
 
-## Link
+## Roadmap
 
-- GitHub: https://github.com/essedev/grimport
-- Documentazione: vedi `PROJECT.md`, `DESIGN.md`, `ROADMAP.md`
+Next planned features (see `FEATURES_TODO.md` for details):
+
+- Kill the process directly from the UI
+- Open in browser / copy URL for HTTP ports
+- CLI for scripting (`portsage reserve`, `portsage list`, etc.)
+- Customizable tags and colors per project
+- System notifications (collisions, zombie ports, MCP events)
+- i18n and language switcher (English + Italian, more languages later)
+
+## Documentation
+
+- 🇬🇧 English: this README, [PROJECT.md](PROJECT.md), [DESIGN.md](DESIGN.md), [ROADMAP.md](ROADMAP.md), [FEATURES_TODO.md](FEATURES_TODO.md), [RELEASING.md](RELEASING.md), [CHANGELOG.md](CHANGELOG.md)
+- 🇮🇹 Italian: [README.it.md](README.it.md), [PROJECT.it.md](PROJECT.it.md)
+
+## License
+
+[MIT](LICENSE) © 2026 Simone Salerno
+
+## Links
+
+- GitHub: https://github.com/essedev/portsage
+- Documentation: see `PROJECT.md`, `DESIGN.md`, `ROADMAP.md`, `FEATURES_TODO.md`, `CHANGELOG.md`

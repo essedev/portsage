@@ -190,8 +190,8 @@ pub fn set_config(
 pub fn export_data(db: State<Arc<Database>>, dest_path: String) -> Result<(), String> {
     let db_path = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("grimport")
-        .join("grimport.db");
+        .join("portsage")
+        .join("portsage.db");
 
     if !db_path.exists() {
         return Err("Database not found".into());
@@ -204,7 +204,7 @@ pub fn export_data(db: State<Arc<Database>>, dest_path: String) -> Result<(), St
         .compression_method(zip::CompressionMethod::Deflated);
 
     // Add database
-    zip.start_file("grimport.db", options).map_err(|e| e.to_string())?;
+    zip.start_file("portsage.db", options).map_err(|e| e.to_string())?;
     let db_bytes = std::fs::read(&db_path).map_err(|e| e.to_string())?;
     std::io::Write::write_all(&mut zip, &db_bytes).map_err(|e| e.to_string())?;
 
@@ -227,14 +227,14 @@ pub fn export_data(db: State<Arc<Database>>, dest_path: String) -> Result<(), St
 pub fn import_data(source_path: String) -> Result<(), String> {
     let db_path = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("grimport")
-        .join("grimport.db");
+        .join("portsage")
+        .join("portsage.db");
 
     let file = std::fs::File::open(&source_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
 
     // Extract database
-    let mut db_file = archive.by_name("grimport.db").map_err(|e| e.to_string())?;
+    let mut db_file = archive.by_name("portsage.db").map_err(|e| e.to_string())?;
     let mut db_bytes = Vec::new();
     std::io::Read::read_to_end(&mut db_file, &mut db_bytes).map_err(|e| e.to_string())?;
     drop(db_file);
@@ -268,7 +268,7 @@ pub fn quit_app(app: tauri::AppHandle) {
 pub fn get_mcp_dir(app: tauri::AppHandle) -> Result<String, String> {
     let config_mcp = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("grimport")
+        .join("portsage")
         .join("mcp");
 
     // Always prefer bundled resources when available, overwriting any existing files in
@@ -325,7 +325,7 @@ pub fn check_mcp_installed() -> Result<bool, String> {
     let parsed: serde_json::Value =
         serde_json::from_str(&content).map_err(|e| e.to_string())?;
 
-    Ok(parsed["mcpServers"]["grimport"].is_object())
+    Ok(parsed["mcpServers"]["portsage"].is_object())
 }
 
 #[tauri::command]
@@ -353,7 +353,7 @@ pub fn install_mcp(mcp_dir: String) -> Result<(), String> {
     };
 
     let mcp_dir_str = mcp_dir.to_string_lossy().to_string();
-    claude_json["mcpServers"]["grimport"] = serde_json::json!({
+    claude_json["mcpServers"]["portsage"] = serde_json::json!({
         "type": "stdio",
         "command": "uv",
         "args": ["--directory", mcp_dir_str, "run", "python", "server.py"]
@@ -366,7 +366,7 @@ pub fn install_mcp(mcp_dir: String) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
 
     // 2. Install skill
-    let skill_dir = home.join(".claude").join("skills").join("grimport");
+    let skill_dir = home.join(".claude").join("skills").join("portsage");
     std::fs::create_dir_all(&skill_dir).map_err(|e| e.to_string())?;
 
     let skill_source = mcp_dir.join("SKILL.md");
@@ -390,11 +390,11 @@ pub fn install_mcp(mcp_dir: String) -> Result<(), String> {
     };
 
     let tools = vec![
-        "mcp__grimport__list_all",
-        "mcp__grimport__reserve_range",
-        "mcp__grimport__register_port",
-        "mcp__grimport__release_project",
-        "mcp__grimport__scan_active",
+        "mcp__portsage__list_all",
+        "mcp__portsage__reserve_range",
+        "mcp__portsage__register_port",
+        "mcp__portsage__release_project",
+        "mcp__portsage__scan_active",
     ];
 
     let allow = settings["permissions"]["allow"]
@@ -434,7 +434,7 @@ pub fn uninstall_mcp() -> Result<(), String> {
         let mut parsed: serde_json::Value =
             serde_json::from_str(&content).map_err(|e| e.to_string())?;
         if let Some(servers) = parsed["mcpServers"].as_object_mut() {
-            servers.remove("grimport");
+            servers.remove("portsage");
         }
         std::fs::write(
             &claude_json_path,
@@ -444,7 +444,7 @@ pub fn uninstall_mcp() -> Result<(), String> {
     }
 
     // 2. Remove skill
-    let skill_dir = home.join(".claude").join("skills").join("grimport");
+    let skill_dir = home.join(".claude").join("skills").join("portsage");
     let _ = std::fs::remove_dir_all(&skill_dir);
 
     // 3. Remove permissions
@@ -456,7 +456,7 @@ pub fn uninstall_mcp() -> Result<(), String> {
         if let Some(allow) = settings["permissions"]["allow"].as_array_mut() {
             allow.retain(|v| {
                 v.as_str()
-                    .map(|s| !s.starts_with("mcp__grimport__"))
+                    .map(|s| !s.starts_with("mcp__portsage__"))
                     .unwrap_or(true)
             });
         }

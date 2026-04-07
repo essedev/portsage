@@ -33,11 +33,11 @@ export function PopoverPanel() {
           className="text-[14px]!"
           style={{ textShadow: "0 0 12px var(--color-accent-amber-glow)" }}
         >
-          grimport
+          portsage
         </GrimText>
         {totalPorts > 0 && (
           <GrimBadge variant={totalActive > 0 ? "active" : "inactive"}>
-            {totalActive} attive
+            {totalActive} active
           </GrimBadge>
         )}
       </header>
@@ -47,7 +47,7 @@ export function PopoverPanel() {
       <div className="flex-1 overflow-y-auto px-[var(--spacing-3)] py-[var(--spacing-2)]">
         {projects.length === 0 ? (
           <p className="text-text-muted text-[13px] text-center py-[var(--spacing-4)]">
-            Nessun progetto
+            No projects
           </p>
         ) : (
           <div className="flex flex-col gap-[var(--spacing-3)]">
@@ -78,7 +78,7 @@ export function PopoverPanel() {
                   ))}
                   {project.ports.length === 0 && (
                     <GrimText variant="body" className="text-text-muted text-[11px]! pl-[var(--spacing-2)]">
-                      Nessuna porta
+                      No ports
                     </GrimText>
                   )}
                 </div>
@@ -92,13 +92,13 @@ export function PopoverPanel() {
 
       <footer className="flex items-center justify-between px-[var(--spacing-4)] h-10 shrink-0">
         <GrimButton variant="ghost" className="text-[12px]!" onClick={quit}>
-          Esci
+          Quit
         </GrimButton>
         <GrimText variant="label">
-          {totalActive}/{totalPorts} porte attive
+          {totalActive}/{totalPorts} active ports
         </GrimText>
         <GrimButton variant="ghost" className="text-[12px]!" onClick={openMain}>
-          Apri grimport
+          Open portsage
         </GrimButton>
       </footer>
     </div>

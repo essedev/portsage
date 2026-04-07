@@ -2,54 +2,65 @@
 
 ## v0.1 - Foundation
 
-- [x] Setup progetto Tauri v2 + React 19 + Tailwind v4
-- [x] SQLite database: schema, migrations, path `~/.config/grimport/`
-- [x] Rust backend: CRUD progetti e porte, accesso DB
-- [x] Port scanner: wrapper su `lsof` per rilevare porte attive
-- [x] Menubar icon + popover con lista progetti e stato porte
-- [x] Finestra app full: sidebar progetti + dettaglio con servizi/porte
-- [x] Aggiunta/rimozione progetti e servizi dalla UI
+- [x] Tauri v2 + React 19 + Tailwind v4 project setup
+- [x] SQLite database: schema, migrations, path `~/.config/portsage/`
+- [x] Rust backend: project and port CRUD, DB access
+- [x] Port scanner: `lsof` wrapper to detect active ports
+- [x] Menubar icon + popover with project list and port status
+- [x] Full app window: project sidebar + detail with services/ports
+- [x] Add/remove projects and services from the UI
 
 ## v0.2 - MCP server
 
-- [x] Unix socket locale esposto dal Rust backend (`~/.config/grimport/grimport.sock`)
-- [x] MCP server Python (thin client, inoltra al socket)
-- [x] Tool: `list_all` - registry completo + stato porte
-- [x] Tool: `reserve_range(project_name)` - riserva prossimo range libero
-- [x] Tool: `register_port(project_name, service, port)` - registra porta
-- [x] Tool: `release_project(project_name)` - libera range
-- [x] Tool: `scan_active` - porte attive sulla macchina
-- [x] Skill file per Claude Code
-- [x] Script install + UI "Connetti a Claude Code" nelle impostazioni
+- [x] Local Unix socket exposed by the Rust backend (`~/.config/portsage/portsage.sock`)
+- [x] Python MCP server (thin client, forwards to socket)
+- [x] Tool: `list_all` - full registry plus port status
+- [x] Tool: `reserve_range(project_name)` - reserves next free range
+- [x] Tool: `register_port(project_name, service, port)` - registers a port
+- [x] Tool: `release_project(project_name)` - releases a range
+- [x] Tool: `scan_active` - active ports on the machine
+- [x] Skill file for Claude Code
+- [x] Install script + "Connect to Claude Code" UI in settings
 
 ## v0.3 - Polish
 
-- [x] Auto-refresh stato porte (polling ogni 5s)
-- [x] Nome processo visibile accanto alle porte attive (risolto via `ps`)
-- [x] Ricerca/filtro progetti nella sidebar
-- [x] Porte non gestite: rileva porte attive > 3000 non associate a progetti
-- [x] Click su path progetto -> apre nel Finder o Terminale
+- [x] Auto-refresh port status (5s polling)
+- [x] Process name visible next to active ports (resolved via `ps`)
+- [x] Project search/filter in the sidebar
+- [x] Unmanaged ports: detect active ports > 3000 not associated with projects
+- [x] Click on project path -> open in Finder or Terminal
 
-## v0.4 - Settings e portabilita'
+## v0.4 - Settings and portability
 
-- [x] Settings: configurazione base_port e range_size
-- [x] Export: DB + preferenze in file `.grimport` (zip con SQLite dump + config)
-- [x] Import: ripristino da file `.grimport`
+- [x] Settings: configure base_port and range_size
+- [x] Export: DB + preferences in a `.portsage` file (zip with SQLite dump + config)
+- [x] Import: restore from a `.portsage` file
 - [x] Launch at login (tauri-plugin-autostart)
-- [ ] ~~Import porte da docker-compose.yml~~ (coperto dal MCP)
-- [ ] ~~Dark/light mode~~ (il tema dark e' l'identita' dell'app)
+- [ ] ~~Import ports from docker-compose.yml~~ (covered by MCP)
+- [ ] ~~Dark/light mode~~ (the dark theme is the app's identity)
 
-## v0.5 - Distribuzione
+## v0.5 - Distribution
 
-- [x] Build `.dmg` con `tauri build`
-- [x] Homebrew tap (`brew tap essedev/grimport && brew install grimport`)
-- [x] GitHub release con DMG allegato
-- [ ] Auto-update (Tauri updater) - futuro
+- [x] `.dmg` build with `tauri build`
+- [x] Homebrew tap (`brew tap essedev/portsage && brew install portsage`)
+- [x] GitHub release with attached DMG
+- [ ] Auto-update (Tauri updater) - future
 
-## v0.6 - CI/CD e cross-platform
+## v0.6 - Feature parity with competitors
 
-- [ ] GitHub Action per build automatiche su push/release
-- [ ] Build universal binary macOS (arm64 + x86_64)
-- [ ] Supporto Linux: adattare scanner (lsof/ss), tray icon, activation policy
-- [ ] Supporto Windows: socket Unix -> named pipe, scanner via netstat/API, comandi OS-specifici
-- [ ] Test cross-platform in CI
+See `FEATURES_TODO.md` for details on each.
+
+- [ ] **Kill process from the UI** - kill action on active ports (basic workflow in port managers)
+- [ ] **Open in browser / Copy URL** - for HTTP ports, click opens `localhost:PORT` in the default browser
+- [ ] **CLI** - `portsage` command for scripting (`portsage reserve`, `portsage list`, etc.)
+- [ ] **Project tags and colors** - visual customization to recognize projects at a glance
+- [ ] **System notifications** - macOS alerts for collisions, zombie ports, MCP events
+- [ ] **i18n and language switcher** - proper i18next setup, English + Italian, language switcher in settings, persisted in DB
+
+## v0.7 - CI/CD and cross-platform
+
+- [ ] GitHub Action for automatic builds on push/release
+- [ ] Universal macOS binary (arm64 + x86_64)
+- [ ] Linux support: adapt scanner (lsof/ss), tray icon, activation policy
+- [ ] Windows support: Unix socket -> named pipe, scanner via netstat/API, OS-specific commands
+- [ ] Cross-platform tests in CI

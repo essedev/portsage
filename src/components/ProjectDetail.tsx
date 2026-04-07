@@ -43,14 +43,14 @@ export function ProjectDetail({
             <>
               <GrimButton
                 variant="ghost"
-                title="Apri nel Finder"
+                title="Open in Finder"
                 onClick={() => cmd.openInFinder(project.path!)}
               >
                 <FolderOpen size={16} />
               </GrimButton>
               <GrimButton
                 variant="ghost"
-                title="Apri nel Terminale"
+                title="Open in Terminal"
                 onClick={() => cmd.openInTerminal(project.path!)}
               >
                 <Terminal size={16} />
@@ -60,7 +60,7 @@ export function ProjectDetail({
           <GrimButton
             variant="danger"
             onClick={() => onDelete(project.id)}
-            title="Rimuovi progetto"
+            title="Remove project"
           >
             <Trash2 size={16} />
           </GrimButton>
@@ -72,20 +72,20 @@ export function ProjectDetail({
           Range: {project.range_start}-{project.range_end}
         </GrimText>
         <GrimBadge variant={activePorts > 0 ? "active" : "inactive"}>
-          {activePorts} attive su {project.ports.length}
+          {activePorts} active of {project.ports.length}
         </GrimBadge>
       </div>
 
       <GrimDivider />
 
       <div className="flex items-center justify-between">
-        <GrimText variant="label" as="h3">PORTE</GrimText>
+        <GrimText variant="label" as="h3">PORTS</GrimText>
         <GrimButton
           variant="ghost"
           onClick={() => setShowAddPort(!showAddPort)}
         >
           <Plus size={16} />
-          Aggiungi
+          Add
         </GrimButton>
       </div>
 
@@ -104,7 +104,7 @@ export function ProjectDetail({
 
       {project.ports.length === 0 ? (
         <p className="text-text-muted text-[13px]">
-          Nessuna porta registrata
+          No ports registered
         </p>
       ) : (
         <div className="flex flex-col gap-[var(--spacing-1)]">

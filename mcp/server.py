@@ -1,4 +1,4 @@
-"""Grimport MCP server - thin client that forwards requests to the Tauri backend via Unix socket."""
+"""Portsage MCP server - thin client that forwards requests to the Tauri backend via Unix socket."""
 
 import json
 import os
@@ -10,12 +10,12 @@ from mcp.server.fastmcp import FastMCP
 
 
 def _socket_path() -> Path:
-    """Return the grimport socket path matching what the Rust app creates.
+    """Return the portsage socket path matching what the Rust app creates.
 
     Mirrors `dirs::config_dir()` from the Rust side:
-      - macOS:   ~/Library/Application Support/grimport/grimport.sock
-      - Linux:   ~/.config/grimport/grimport.sock
-      - Windows: %APPDATA%\\grimport\\grimport.sock
+      - macOS:   ~/Library/Application Support/portsage/portsage.sock
+      - Linux:   ~/.config/portsage/portsage.sock
+      - Windows: %APPDATA%\\portsage\\portsage.sock
     """
     home = Path.home()
     if sys.platform == "darwin":
@@ -24,18 +24,18 @@ def _socket_path() -> Path:
         base = Path(os.environ.get("APPDATA", str(home)))
     else:
         base = home / ".config"
-    return base / "grimport" / "grimport.sock"
+    return base / "portsage" / "portsage.sock"
 
 
 SOCKET_PATH = _socket_path()
 
-mcp = FastMCP("grimport", json_response=True)
+mcp = FastMCP("portsage", json_response=True)
 
 
 def _send(method: str, params: dict | None = None) -> dict:
-    """Send a JSON request to the Grimport Unix socket and return the response."""
+    """Send a JSON request to the Portsage Unix socket and return the response."""
     if not SOCKET_PATH.exists():
-        return {"error": "Grimport app is not running. Start it first."}
+        return {"error": "Portsage app is not running. Start it first."}
 
     request = {"method": method}
     if params:
@@ -61,7 +61,7 @@ def _send(method: str, params: dict | None = None) -> dict:
             return {"error": response["error"]}
         return response.get("result", response)
     except ConnectionRefusedError:
-        return {"error": "Cannot connect to Grimport. Is the app running?"}
+        return {"error": "Cannot connect to Portsage. Is the app running?"}
     except Exception as e:
         return {"error": str(e)}
 

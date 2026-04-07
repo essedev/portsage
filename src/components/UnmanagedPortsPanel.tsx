@@ -12,10 +12,10 @@ export function UnmanagedPortsPanel({ ports }: UnmanagedPortsPanelProps) {
     <div className="flex flex-col gap-[var(--spacing-4)] p-[var(--spacing-5)]">
       <div className="flex flex-col gap-[var(--spacing-1)]">
         <GrimText variant="title" as="h2">
-          Porte non gestite
+          Unmanaged ports
         </GrimText>
         <GrimText variant="body" className="text-text-secondary">
-          Porte attive sopra la 3000 non associate a nessun progetto
+          Active ports above 3000 not associated with any project
         </GrimText>
       </div>
 
@@ -23,14 +23,14 @@ export function UnmanagedPortsPanel({ ports }: UnmanagedPortsPanelProps) {
 
       {ports.length === 0 ? (
         <GrimText variant="body" className="text-text-muted">
-          Nessuna porta non gestita rilevata
+          No unmanaged ports detected
         </GrimText>
       ) : (
         <div className="flex flex-col">
           <div className="flex items-center gap-[var(--spacing-2)] pb-[var(--spacing-2)] mb-[var(--spacing-1)] border-b border-border-subtle">
             <div className="w-5" />
-            <GrimText variant="label" className="w-20">Porta</GrimText>
-            <GrimText variant="label" className="flex-1">Processo</GrimText>
+            <GrimText variant="label" className="w-20">Port</GrimText>
+            <GrimText variant="label" className="flex-1">Process</GrimText>
             <GrimText variant="label" className="w-16 text-right">PID</GrimText>
           </div>
           {ports.map((port) => (

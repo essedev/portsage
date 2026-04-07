@@ -56,7 +56,7 @@ function MainWindow() {
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <GrimText variant="body" className="text-text-muted">
-                Caricamento...
+                Loading...
               </GrimText>
             </div>
           ) : activeView === "settings" ? (
@@ -76,7 +76,7 @@ function MainWindow() {
           ) : (
             <div className="flex items-center justify-center h-full">
               <GrimText variant="body" className="text-text-muted">
-                Seleziona un progetto dalla sidebar
+                Select a project from the sidebar
               </GrimText>
             </div>
           )}

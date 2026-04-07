@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Grimport MCP - Install script
+# Portsage MCP - Install script
 # Registers the MCP server in Claude Code and installs the skill.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MCP_DIR="$SCRIPT_DIR"
-SKILL_NAME="grimport"
+SKILL_NAME="portsage"
 
-echo "=== Grimport MCP - Setup ==="
+echo "=== Portsage MCP - Setup ==="
 echo ""
 
 # Check dependencies
@@ -49,7 +49,7 @@ fi
 
 # Register MCP server
 echo "[2/4] Registering MCP server in $MCP_FILE..."
-jq --arg dir "$MCP_DIR" '.mcpServers["grimport"] = {
+jq --arg dir "$MCP_DIR" '.mcpServers["portsage"] = {
     "type": "stdio",
     "command": "uv",
     "args": ["--directory", $dir, "run", "python", "server.py"]
@@ -69,15 +69,15 @@ if [ ! -f "$SETTINGS_FILE" ]; then
 fi
 
 jq '.permissions.allow = (.permissions.allow // []) + [
-    "mcp__grimport__list_all",
-    "mcp__grimport__reserve_range",
-    "mcp__grimport__register_port",
-    "mcp__grimport__release_project",
-    "mcp__grimport__scan_active"
+    "mcp__portsage__list_all",
+    "mcp__portsage__reserve_range",
+    "mcp__portsage__register_port",
+    "mcp__portsage__release_project",
+    "mcp__portsage__scan_active"
 ] | .permissions.allow |= unique' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
 
 echo ""
 echo "=== Done! ==="
 echo ""
-echo "Make sure the Grimport app is running before using MCP tools."
+echo "Make sure the Portsage app is running before using MCP tools."
 echo "Restart Claude Code to load the new MCP server."

@@ -20,7 +20,7 @@ export function GrimSearch({ className = "", ...props }: GrimSearchProps) {
           focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
           transition-colors duration-150
         "
-        placeholder="Cerca..."
+        placeholder="Search..."
         {...props}
       />
     </div>
