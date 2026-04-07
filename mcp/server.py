@@ -43,6 +43,9 @@ def _send(method: str, params: dict | None = None) -> dict:
 
     try:
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        # Bound every blocking call. Without this, a hung Rust backend would
+        # freeze the MCP tool call indefinitely and hang Claude Code.
+        sock.settimeout(5.0)
         sock.connect(str(SOCKET_PATH))
         sock.sendall((json.dumps(request) + "\n").encode())
 
@@ -62,6 +65,8 @@ def _send(method: str, params: dict | None = None) -> dict:
         return response.get("result", response)
     except ConnectionRefusedError:
         return {"error": "Cannot connect to Portsage. Is the app running?"}
+    except socket.timeout:
+        return {"error": "Portsage backend did not respond within 5s."}
     except Exception as e:
         return {"error": str(e)}
 

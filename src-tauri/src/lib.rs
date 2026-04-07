@@ -19,7 +19,13 @@ use tauri::ActivationPolicy;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let database = Arc::new(Database::new().expect("failed to initialize database"));
+    let database = match Database::new() {
+        Ok(db) => Arc::new(db),
+        Err(e) => {
+            eprintln!("portsage: failed to initialize database: {e}");
+            std::process::exit(1);
+        }
+    };
 
     // Start Unix socket server for MCP
     socket::start_socket_server(database.clone());
@@ -100,7 +106,10 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("error while building tauri application");
+        .unwrap_or_else(|e| {
+            eprintln!("portsage: failed to build tauri application: {e}");
+            std::process::exit(1);
+        });
 
     // Start as accessory (no dock icon, just status bar)
     #[cfg(target_os = "macos")]

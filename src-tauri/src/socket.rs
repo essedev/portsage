@@ -1,10 +1,17 @@
 use crate::db::Database;
 use crate::scanner::scan_active_ports;
 use serde_json::{json, Value};
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
+
+/// Idle timeout for socket connections. Closes clients that connect and
+/// then sit silent, so a leaked or abandoned client cannot keep a tokio
+/// task pinned forever.
+const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 fn socket_path() -> PathBuf {
     dirs::config_dir()
@@ -15,17 +22,48 @@ fn socket_path() -> PathBuf {
 
 pub fn start_socket_server(db: Arc<Database>) {
     std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt,
+            Err(e) => {
+                eprintln!("portsage: failed to create tokio runtime, MCP socket disabled: {e}");
+                return;
+            }
+        };
         rt.block_on(async move {
             let path = socket_path();
             // Remove stale socket file
             let _ = std::fs::remove_file(&path);
             if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    eprintln!("portsage: cannot create socket dir {}: {e}", parent.display());
+                    return;
+                }
+                // Restrict the parent directory to the current user only (rwx------).
+                // Combined with the 0600 socket file below, this prevents other local
+                // users from connecting to the MCP socket and mutating our DB.
+                if let Err(e) = std::fs::set_permissions(
+                    parent,
+                    std::fs::Permissions::from_mode(0o700),
+                ) {
+                    eprintln!("portsage: cannot chmod 0700 on {}: {e}", parent.display());
+                }
             }
 
-            let listener = UnixListener::bind(&path)
-                .expect("failed to bind unix socket");
+            let listener = match UnixListener::bind(&path) {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("portsage: failed to bind unix socket {}: {e}", path.display());
+                    return;
+                }
+            };
+
+            // Restrict socket file to owner-only rw. Belt-and-braces with the 0700 dir.
+            if let Err(e) = std::fs::set_permissions(
+                &path,
+                std::fs::Permissions::from_mode(0o600),
+            ) {
+                eprintln!("portsage: cannot chmod 0600 on {}: {e}", path.display());
+            }
 
             loop {
                 if let Ok((stream, _)) = listener.accept().await {
@@ -33,7 +71,16 @@ pub fn start_socket_server(db: Arc<Database>) {
                     tokio::spawn(async move {
                         let (reader, mut writer) = stream.into_split();
                         let mut lines = BufReader::new(reader).lines();
-                        while let Ok(Some(line)) = lines.next_line().await {
+                        loop {
+                            let next = tokio::time::timeout(
+                                IDLE_TIMEOUT,
+                                lines.next_line(),
+                            ).await;
+                            let line = match next {
+                                Ok(Ok(Some(line))) => line,
+                                // Idle timeout, EOF, or read error: close the connection.
+                                _ => break,
+                            };
                             let response = handle_request(&db, &line);
                             let mut out = serde_json::to_string(&response)
                                 .unwrap_or_else(|_| r#"{"error":"serialize failed"}"#.into());

@@ -188,10 +188,7 @@ pub fn set_config(
 
 #[tauri::command]
 pub fn export_data(db: State<Arc<Database>>, dest_path: String) -> Result<(), String> {
-    let db_path = dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("portsage")
-        .join("portsage.db");
+    let db_path = Database::db_path();
 
     if !db_path.exists() {
         return Err("Database not found".into());
@@ -225,10 +222,7 @@ pub fn export_data(db: State<Arc<Database>>, dest_path: String) -> Result<(), St
 
 #[tauri::command]
 pub fn import_data(source_path: String) -> Result<(), String> {
-    let db_path = dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("portsage")
-        .join("portsage.db");
+    let db_path = Database::db_path();
 
     let file = std::fs::File::open(&source_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
@@ -413,7 +407,9 @@ pub fn install_mcp(mcp_dir: String) -> Result<(), String> {
     settings["permissions"]["allow"] =
         serde_json::Value::Array(allow_set.into_iter().map(serde_json::Value::String).collect());
 
-    std::fs::create_dir_all(settings_path.parent().unwrap()).map_err(|e| e.to_string())?;
+    if let Some(parent) = settings_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     std::fs::write(
         &settings_path,
         serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?,

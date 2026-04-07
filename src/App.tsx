@@ -7,14 +7,24 @@ import { SettingsPanel } from "@/components/SettingsPanel";
 import { UnmanagedPortsPanel } from "@/components/UnmanagedPortsPanel";
 import { PopoverPanel } from "@/components/PopoverPanel";
 import { GrimText } from "@/components/ui/GrimText";
+import { GrimToast } from "@/components/ui/GrimToast";
 import { useProjects } from "@/features/projects/useProjects";
 import type { ProjectStatus } from "@/lib/types";
 
 type View = "project" | "unmanaged" | "settings";
 
 function MainWindow() {
-  const { projects, unmanagedPorts, loading, create, remove, addPort, removePort } =
-    useProjects();
+  const {
+    projects,
+    unmanagedPorts,
+    loading,
+    error,
+    clearError,
+    create,
+    remove,
+    addPort,
+    removePort,
+  } = useProjects();
   const [selected, setSelected] = useState<ProjectStatus | null>(null);
   const [activeView, setActiveView] = useState<View>("project");
 
@@ -82,6 +92,8 @@ function MainWindow() {
           )}
         </main>
       </div>
+
+      <GrimToast message={error} onDismiss={clearError} />
     </div>
   );
 }

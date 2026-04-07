@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-04-07
+
+### Added
+- Error toast in the main window: failed actions (duplicate name, port outside range, etc.) now surface as a dismissible bottom-right banner instead of being silently logged to the console
+- `humanizeError` translation layer: common SQLite/IO errors are mapped to readable messages, with raw text as fallback
+- Documentation of the MCP Unix socket protocol in `PROJECT.md` (transport, methods, request/response envelopes, example session)
+
+### Changed
+- Hardened the MCP Unix socket: parent dir is now `0700` and the socket file `0600`, so only the current user can connect
+- Idle socket connections are closed after 60 seconds, preventing leaked client tasks from accumulating
+- Python MCP client (`mcp/server.py`) now applies a 5s timeout on connect/send/recv, so a stuck backend can no longer hang Claude Code
+- Centralized the database path: `commands::export_data` and `commands::import_data` now use `Database::db_path()` instead of recomputing it
+- Toast position: bottom-right (was bottom-center)
+
+### Fixed
+- Race condition in `Database::create_project`: range computation and insert are now performed under a single mutex lock, so two concurrent project creations can no longer produce overlapping port ranges
+- Replaced all `.expect()` calls in critical startup paths (`lib.rs`, `socket.rs`) with graceful error handling - the app no longer panics on DB init or socket bind failures
+- Replaced all `Mutex::lock().unwrap()` calls in `db.rs` with a poisoning-safe helper, eliminating the theoretical panic on a poisoned mutex
+- Removed `Path::parent().unwrap()` in `commands::install_mcp`
+
 ### Planned
 - Kill process from the UI
 - Open in browser / copy URL for HTTP ports
@@ -36,5 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - English documentation (README, PROJECT, DESIGN, ROADMAP, FEATURES_TODO, RELEASING) with Italian companions for README and PROJECT
 - MIT License
 
-[Unreleased]: https://github.com/essedev/portsage/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/essedev/portsage/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/essedev/portsage/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/essedev/portsage/releases/tag/v0.6.0

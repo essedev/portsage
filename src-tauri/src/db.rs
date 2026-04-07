@@ -1,7 +1,7 @@
 use rusqlite::{Connection, Result, params};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Project {
@@ -57,7 +57,19 @@ impl Database {
         Ok(db)
     }
 
-    fn db_path() -> PathBuf {
+    /// Lock the inner connection, recovering from mutex poisoning.
+    ///
+    /// Poisoning only happens if some other thread panicked while holding
+    /// this lock. SQLite statements are atomic and our closures keep no
+    /// in-memory invariants across calls, so the on-disk state is always
+    /// consistent even after such a panic. Recovering with `into_inner`
+    /// lets the app keep running instead of cascading the panic to every
+    /// future DB caller.
+    fn conn(&self) -> MutexGuard<'_, Connection> {
+        self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub(crate) fn db_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("portsage")
@@ -65,7 +77,7 @@ impl Database {
     }
 
     fn migrate(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS projects (
                 id INTEGER PRIMARY KEY,
@@ -97,7 +109,7 @@ impl Database {
 
     #[allow(dead_code)]
     pub fn get_config(&self, key: &str) -> Result<String> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         conn.query_row(
             "SELECT value FROM config WHERE key = ?1",
             params![key],
@@ -107,7 +119,7 @@ impl Database {
 
     #[allow(dead_code)]
     pub fn set_config(&self, key: &str, value: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         conn.execute(
             "INSERT OR REPLACE INTO config (key, value) VALUES (?1, ?2)",
             params![key, value],
@@ -116,7 +128,16 @@ impl Database {
     }
 
     pub fn next_available_range(&self) -> Result<(i64, i64)> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
+        Self::compute_next_range(&conn)
+    }
+
+    /// Pure helper that computes the next free range using the supplied
+    /// connection, without acquiring the mutex. Lets `create_project` perform
+    /// "compute range + insert" atomically under a single lock, preventing the
+    /// race where two concurrent callers would otherwise read the same
+    /// `MAX(range_end)` and produce overlapping projects.
+    fn compute_next_range(conn: &Connection) -> Result<(i64, i64)> {
         let base_port: i64 = conn
             .query_row(
                 "SELECT value FROM config WHERE key = 'base_port'",
@@ -153,8 +174,8 @@ impl Database {
         name: &str,
         path: Option<&str>,
     ) -> Result<Project> {
-        let (range_start, range_end) = self.next_available_range()?;
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
+        let (range_start, range_end) = Self::compute_next_range(&conn)?;
         conn.execute(
             "INSERT INTO projects (name, path, range_start, range_end) \
              VALUES (?1, ?2, ?3, ?4)",
@@ -179,14 +200,14 @@ impl Database {
     }
 
     pub fn delete_project(&self, id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         conn.execute("DELETE FROM ports WHERE project_id = ?1", params![id])?;
         conn.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
         Ok(())
     }
 
     pub fn list_projects(&self) -> Result<Vec<ProjectWithPorts>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         let mut stmt = conn.prepare(
             "SELECT id, name, path, range_start, range_end, created_at \
              FROM projects ORDER BY range_start",
@@ -232,7 +253,7 @@ impl Database {
         service: &str,
         port: i64,
     ) -> Result<Port> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         // Validate the port is within the project's reserved range.
         let (range_start, range_end): (i64, i64) = conn.query_row(
             "SELECT range_start, range_end FROM projects WHERE id = ?1",
@@ -273,7 +294,7 @@ impl Database {
     }
 
     pub fn remove_port(&self, id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         conn.execute("DELETE FROM ports WHERE id = ?1", params![id])?;
         Ok(())
     }

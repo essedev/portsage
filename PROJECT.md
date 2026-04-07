@@ -106,6 +106,50 @@ The MCP server exposes 5 tools:
 
 The MCP server files (`server.py`, `pyproject.toml`, `SKILL.md`) are bundled as resources in the `.dmg` and copied into `~/Library/Application Support/portsage/mcp/` on first use (see `commands::get_mcp_dir`).
 
+### Socket protocol
+
+The Rust backend listens on a Unix domain socket at `~/Library/Application Support/portsage/portsage.sock` (macOS) / `$XDG_CONFIG_HOME/portsage/portsage.sock` (Linux). The parent directory is created with mode `0700` and the socket file with mode `0600`, so only the current user can connect. Implementation: `src-tauri/src/socket.rs`.
+
+**Transport**: line-delimited JSON over `SOCK_STREAM`. One request per line (`\n` terminated), one response per line. The connection is persistent: a client may send multiple requests on the same connection. Idle connections are closed after 60 seconds.
+
+**Request envelope**:
+
+```json
+{ "method": "<name>", "params": { ... } }
+```
+
+**Response envelope** is one of:
+
+```json
+{ "result": <value> }
+{ "error": "<message>" }
+```
+
+**Methods**:
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `list_all` | none | `[{ id, name, path, range: [start, end], ports: [{ service, port, active }] }]` |
+| `reserve_range` | `name` (string, required), `path` (string, optional) | `{ name, range: [start, end] }` |
+| `register_port` | `project` (string), `service` (string), `port` (int, must be inside the project range) | `{ service, port }` |
+| `release_project` | `name` (string) | `"ok"` |
+| `scan_active` | none | `[port, ...]` (sorted ascending) |
+
+Errors that can be returned: `invalid json: ...`, `unknown method: ...`, `missing params.<field>`, `project '<name>' not found`, `port <n> is outside project range <a>-<b>`, plus any SQLite constraint failure (e.g. duplicate project name, duplicate port).
+
+**Example session** (using `nc -U`):
+
+```text
+> {"method":"reserve_range","params":{"name":"myapp","path":"/tmp/myapp"}}
+< {"result":{"name":"myapp","range":[4000,4009]}}
+> {"method":"register_port","params":{"project":"myapp","service":"vite","port":4000}}
+< {"result":{"service":"vite","port":4000}}
+> {"method":"list_all"}
+< {"result":[{"id":1,"name":"myapp","path":"/tmp/myapp","range":[4000,4009],"ports":[{"service":"vite","port":4000,"active":false}]}]}
+```
+
+The Python MCP server (`mcp/server.py`) is the reference client. Any other language can integrate by speaking this protocol directly.
+
 ## UI
 
 ### Menubar popover (quick view)
