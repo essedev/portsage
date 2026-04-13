@@ -121,7 +121,7 @@ Pannello compatto (350x480px), solo lettura, per check veloce.
 Finestra ridimensionabile (min 700x400) con titlebar trasparente.
 
 **Header**
-- Titolo "portsage" con glow ambra + tagline "your port sage"
+- Titolo "portsage" con glow ambra + tagline "ports under control"
 - Badge porte attive
 
 **Sidebar**

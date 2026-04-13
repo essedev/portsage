@@ -174,7 +174,7 @@ Compact panel (350x480px), read-only, for fast checks.
 Resizable window (min 700x400) with transparent titlebar.
 
 **Header**
-- "portsage" title with amber glow and the tagline "your port sage"
+- "portsage" title with amber glow and the tagline "ports under control"
 - Active ports badge
 
 **Sidebar**

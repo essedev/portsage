@@ -30,7 +30,7 @@ export function AppHeader({ projects }: AppHeaderProps) {
           portsage
         </UIText>
         <UIText variant="label" className="text-text-muted select-none">
-          your port sage
+          ports under control
         </UIText>
       </div>
       {totalActive > 0 && (
