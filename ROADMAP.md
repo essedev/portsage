@@ -52,7 +52,6 @@ See `FEATURES_TODO.md` for details on each.
 
 - [x] **Kill process from the UI** - per-port and per-project (SIGTERM with SIGKILL escalation after 2s)
 - [x] **Open in browser** - for HTTP ports, click opens `localhost:PORT` in the default browser
-- [ ] **Copy URL** - copy `http://localhost:PORT` to clipboard
 - [x] **CLI** - `portsage` command for scripting (`portsage reserve`, `portsage list`, `portsage kill`, etc.), bundled with the app and exposed on PATH via Homebrew
 - [ ] **Project tags and colors** - visual customization to recognize projects at a glance
 - [ ] **System notifications** - macOS alerts for collisions, zombie ports, MCP events

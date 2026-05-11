@@ -16,12 +16,11 @@ Not shipped (still open):
 
 ---
 
-## 2. Open in browser / Copy URL - PARTIALLY DONE
+## 2. Open in browser - DONE
 
 Shipped: click on any port number opens `http://localhost:PORT` in the default browser. Available in main window project detail, popover, and unmanaged ports panel. Backed by `open_in_browser(port: i64)` (runs macOS `open <url>`) and a `UIPortLink` primitive. No HTTP heuristic - we let the browser report "connection refused" if the port isn't actually HTTP, which is clearer than a heuristic blacklist.
 
-Not shipped:
-- Copy URL to clipboard (Cmd+click / right-click)
+The original "Copy URL to clipboard" sub-item was dropped: the URL is always `http://localhost:<port>`, the port number is already visible in every surface, and the user can type `localhost:4000` directly into Slack/curl/etc. faster than reaching for a copy affordance. The feature would only earn its place if Portsage tracked non-trivial URLs (paths, query strings, non-localhost hosts) - which it doesn't, by design.
 
 ---
 
