@@ -14,6 +14,7 @@ Un'app macOS con:
 - **Popover dalla menubar**: quick view compatta per controllare lo stato delle porte
 - **Finestra app full**: gestione completa di progetti, porte, settings
 - **MCP server**: Claude Code riserva porte e registra servizi automaticamente
+- **CLI**: un binario `portsage` in PATH per scripting, CI e uso veloce da terminale - distribuito insieme all'app
 - **Porte non gestite**: rileva porte attive non associate a nessun progetto
 
 ## Architettura
@@ -22,24 +23,33 @@ Un'app macOS con:
 
 1. **App Tauri** (Tauri v2 + React + Tailwind)
    - Rust backend: unico owner dello stato, gestisce DB e port scanning
-   - Espone un Unix socket locale (`~/.config/portsage/portsage.sock`) per il MCP server
+   - Espone un Unix socket locale (`~/.config/portsage/portsage.sock`) per MCP e CLI
    - Frontend React per popover e finestra full
+   - Modalità `--headless` (`-H`): stesso binario, ma senza tray e senza finestre - solo il socket server. Usata dalla CLI per autospawn del backend se l'app GUI non è in esecuzione
 
 2. **MCP server** (Python, thin client)
    - Riceve chiamate da Claude Code via stdio
    - Le inoltra al Tauri backend via Unix socket
    - Non accede al DB direttamente
 
-3. **Database** (SQLite)
+3. **CLI** (Rust, `crates/portsage-cli`)
+   - Binario `portsage` bundlato dentro `Portsage.app` e linkato in PATH dal cask Homebrew
+   - Parla con il backend via lo stesso Unix socket usato da MCP, attraverso il crate `portsage-client` (single source of truth per i tipi del protocollo)
+   - 13 sottocomandi: parità completa con la superficie MCP
+   - Auto-spawn del backend in modalità `--headless` se nessuna istanza è in esecuzione
+
+4. **Database** (SQLite)
    - Path: `~/.config/portsage/portsage.db`
    - Source of truth, gestito esclusivamente dal Rust backend
 
 ### Flusso dati
 
 ```
-Claude Code  -->  MCP server (Python/stdio)  -->  Unix socket  -->  Tauri (Rust)  -->  SQLite
-                                                                         |
-UI (React)  <--  Tauri IPC commands  <------------------------------------
+Claude Code  -->  MCP server (Python/stdio)  --|
+                                               |
+Terminale   -->  portsage (CLI Rust)  ---------+--> Unix socket  -->  Tauri (Rust)  -->  SQLite
+                                                                            |
+UI (React)  <--  Tauri IPC commands  <----------------------------------------
 ```
 
 ### Database schema
@@ -80,31 +90,39 @@ Le porte non gestite sono filtrate: solo porte >= 3000, esclusi processi di sist
 - **Frontend**: React 19 + TypeScript + Tailwind v4
 - **App shell**: Tauri v2 (Rust) - menubar, system tray, popover, finestra app
 - **MCP server**: Python + FastMCP SDK (thin client via stdio)
-- **Package manager**: pnpm (frontend), uv (Python)
+- **CLI**: Rust + clap, in un Cargo workspace con `src-tauri` (`crates/portsage-cli` + `crates/portsage-client`)
+- **Package manager**: pnpm (frontend), uv (Python), cargo (workspace Rust)
 - **Database**: SQLite in `~/.config/portsage/`
 - **Font**: system-ui (UI), ui-monospace (titoli e dati tecnici)
 
 ## Distribuzione
 
 - **Dev**: `pnpm tauri dev`
-- **Build**: `pnpm tauri build` (genera `.dmg`)
-- **Homebrew**: `brew tap essedev/portsage && brew install portsage`
+- **Build**: `pnpm tauri build` (genera `.dmg`; chaina `pnpm build:cli` via `beforeBuildCommand` per stagare il binario CLI come sidecar `externalBin`)
+- **Homebrew**: `brew tap essedev/portsage && brew install portsage` - installa la `.app` e linka `portsage-cli` in PATH come `portsage` via stanza `binary` del cask
 - **GitHub**: https://github.com/essedev/portsage
 
 ## Integrazione MCP
 
-Il MCP server espone 5 tool:
-- `list_all` - registry completo + stato porte
-- `reserve_range(project_name)` - riserva prossimo range libero
-- `register_port(project_name, service, port)` - registra porta
-- `release_project(project_name)` - libera range
-- `scan_active` - porte attive sulla macchina
+Il MCP server espone 14 tool in tre gruppi (parità completa con la CLI):
+
+- **Lettura**: `list_all`, `scan_active`, `list_unmanaged`, `next_range`, `get_config`, `find_project_by_path`
+- **Mutazione**: `reserve_range`, `register_port`, `remove_port`, `release_project`, `set_config`
+- **Azione**: `kill_port`, `kill_project`, `open_in_browser`
 
 **Claude Code**: installazione automatica dall'app (Impostazioni > "Configura MCP" > Claude Code) o da terminale (`mcp/install.sh`). Installa MCP server, skill file e permessi tool.
 
-**Altri editor**: l'app supporta config copy-paste per Cursor, Claude Desktop, Cline, VS Code (Copilot), Codex (TOML), Windsurf. La sezione "Altri editor" in Impostazioni > "Configura MCP" mostra dropdown editor + config gia' generata col path corretto della directory MCP, pronta da incollare nel file di config dell'editor.
+**Altri editor**: l'app supporta config copy-paste per Cursor, Claude Desktop, Cline, VS Code (Copilot), Codex (TOML), Windsurf. La sezione "Altri editor" in Impostazioni > "Configura MCP" mostra dropdown editor + config già generata col path corretto della directory MCP, pronta da incollare nel file di config dell'editor.
 
 I file MCP server (`server.py`, `pyproject.toml`, `SKILL.md`) vengono bundlati come risorse nell'app `.dmg` e copiati in `~/Library/Application Support/portsage/mcp/` al primo uso (vedi `commands::get_mcp_dir`).
+
+### Protocollo socket
+
+Il protocollo line-delimited JSON e la tabella completa dei metodi/payload sono documentati in [PROJECT.md #socket-protocol](PROJECT.md#socket-protocol). I tipi canonici stanno in `crates/portsage-client/src/types.rs` e sono ri-esportati sia dal backend Rust sia dalla CLI.
+
+## CLI
+
+Una volta installata l'app, `portsage` è disponibile in PATH. Sottocomandi: `list`, `status`, `reserve`, `register`, `remove`, `release`, `scan`, `kill`, `kill-project`, `open`, `config get|set`, `doctor`. Modalità output: human (colorato su TTY), `--json`, `-q/--quiet`. Le operazioni distruttive (`release`, `kill`, `kill-project`) chiedono conferma interattiva; se la stdin non è un TTY, rifiutano senza `-y` (no auto-accept silenzioso da pipe). Exit code: `0` ok, `1` generico, `2` usage, `3` backend irraggiungibile, `4` non trovato, `5` conflitto. Riferimento completo via `portsage --help` (canonical, sempre in sync con il binario).
 
 ## UI
 
