@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = [
+    "src-tauri",
+    "crates/portsage-client",
+    "crates/portsage-cli",
+]
+
+# Shared across all workspace crates. Bumping here is the source of truth for
+# `portsage --version`. The app's bundle version is tracked separately in
+# `src-tauri/tauri.conf.json` and `package.json` (see RELEASING.md).
+[workspace.package]
+version = "0.9.0"
+edition = "2021"
+authors = ["Simone Salerno"]

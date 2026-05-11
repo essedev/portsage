@@ -1,3 +1,4 @@
+mod actions;
 mod commands;
 mod db;
 mod scanner;
@@ -5,6 +6,90 @@ mod socket;
 
 use db::Database;
 use std::sync::Arc;
+
+/// Returns true when the process should run as a headless backend (socket
+/// server only, no Tauri GUI). Exposed so `main.rs` can dispatch before
+/// constructing any Tauri state.
+pub fn is_headless_argv<S: AsRef<str>>(args: &[S]) -> bool {
+    args.iter()
+        .skip(1)
+        .any(|a| matches!(a.as_ref(), "--headless" | "-H"))
+}
+
+/// Cheap liveness probe: another Portsage process is already serving the
+/// socket if a plain Unix-domain connect to `path` succeeds.
+fn another_instance_alive_at(path: &std::path::Path) -> bool {
+    std::os::unix::net::UnixStream::connect(path).is_ok()
+}
+
+/// Used by `run_headless` to refuse to start a second backend that would
+/// clobber the existing one's socket file.
+fn another_instance_alive() -> bool {
+    another_instance_alive_at(&portsage_client::default_socket_path())
+}
+
+/// Headless mode: spin up the socket server only, then block on SIGINT / SIGTERM.
+/// Used by the CLI's autospawn flow and by anyone who wants the backend in CI
+/// or scripted contexts without the menubar UI.
+pub fn run_headless() {
+    if another_instance_alive() {
+        eprintln!(
+            "portsage: another instance is already serving the socket; exiting cleanly"
+        );
+        return;
+    }
+
+    let database = match Database::new() {
+        Ok(db) => Arc::new(db),
+        Err(e) => {
+            eprintln!("portsage: failed to initialize database: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    socket::start_socket_server(database);
+    eprintln!("portsage: headless backend ready");
+
+    // Block on either SIGINT (Ctrl-C) or SIGTERM (`kill <pid>`, brew upgrade
+    // shutdowns). Without the SIGTERM handler the process would die hard on
+    // upgrade scripts that signal it to stop, leaving a stale socket file.
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("portsage: failed to create tokio runtime for signals: {e}");
+            std::process::exit(1);
+        }
+    };
+    rt.block_on(async {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{signal, SignalKind};
+            let mut sigterm = match signal(SignalKind::terminate()) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("portsage: cannot install SIGTERM handler: {e}");
+                    return;
+                }
+            };
+            let mut sigint = match signal(SignalKind::interrupt()) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("portsage: cannot install SIGINT handler: {e}");
+                    return;
+                }
+            };
+            tokio::select! {
+                _ = sigterm.recv() => {}
+                _ = sigint.recv() => {}
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = tokio::signal::ctrl_c().await;
+        }
+    });
+    eprintln!("portsage: shutting down");
+}
 use tauri::{
     Manager,
     tray::TrayIconEvent,
@@ -161,4 +246,53 @@ pub fn run() {
             _ => {}
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_headless_argv_detects_long_flag() {
+        let args = vec!["portsage", "--headless"];
+        assert!(is_headless_argv(&args));
+    }
+
+    #[test]
+    fn is_headless_argv_detects_short_flag() {
+        let args = vec!["portsage", "-H"];
+        assert!(is_headless_argv(&args));
+    }
+
+    #[test]
+    fn is_headless_argv_ignores_program_name_position() {
+        // A binary literally named `--headless` (extremely unlikely) shouldn't
+        // count: only flags after argv[0] are interpreted.
+        let args = vec!["--headless"];
+        assert!(!is_headless_argv(&args));
+    }
+
+    #[test]
+    fn is_headless_argv_returns_false_when_absent() {
+        let args = vec!["portsage"];
+        assert!(!is_headless_argv(&args));
+        let args = vec!["portsage", "--other-flag"];
+        assert!(!is_headless_argv(&args));
+    }
+
+    #[test]
+    fn another_instance_alive_at_returns_false_when_no_socket() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nope.sock");
+        assert!(!another_instance_alive_at(&path));
+    }
+
+    #[test]
+    fn another_instance_alive_at_returns_true_when_listener_bound() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ours.sock");
+        let _listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
+        // The listener is held by `_listener`; a connect probe should succeed.
+        assert!(another_instance_alive_at(&path));
+    }
 }

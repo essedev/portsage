@@ -93,12 +93,11 @@ Unmanaged ports are filtered: only ports >= 3000, excluding system processes (Ai
 
 ## MCP integration
 
-The MCP server exposes 5 tools:
-- `list_all` - full registry plus port status
-- `reserve_range(project_name)` - reserves the next free range
-- `register_port(project_name, service, port)` - registers a port
-- `release_project(project_name)` - releases a range
-- `scan_active` - active ports on the machine
+The MCP server exposes 14 tools in three groups (full parity with the CLI):
+
+- **Read**: `list_all`, `scan_active`, `list_unmanaged`, `next_range`, `get_config`, `find_project_by_path`
+- **Mutate**: `reserve_range`, `register_port`, `remove_port`, `release_project`, `set_config`
+- **Act**: `kill_port`, `kill_project`, `open_in_browser`
 
 **Claude Code**: automatic install from the app (Settings > "Configure MCP" > Claude Code) or from terminal (`mcp/install.sh`). Installs the MCP server, the skill file, and tool permissions.
 
@@ -125,36 +124,55 @@ The Rust backend listens on a Unix domain socket at `~/Library/Application Suppo
 { "error": "<message>" }
 ```
 
-**Methods**:
+**Methods** (canonical types defined in `crates/portsage-client/src/types.rs`):
 
 | Method | Params | Result |
 | --- | --- | --- |
-| `list_all` | none | `[{ id, name, path, range: [start, end], ports: [{ service, port, active }] }]` |
-| `reserve_range` | `name` (string, required), `path` (string, optional) | `{ name, range: [start, end] }` |
-| `register_port` | `project` (string), `service` (string), `port` (int, must be inside the project range) | `{ service, port }` |
+| `list_all` | none | `[ProjectStatus]` |
+| `reserve_range` | `name` (string, required), `path` (string, optional) | `ProjectStatus` |
+| `register_port` | `project` (string), `service` (string), `port` (int, must be inside the project range) | `PortStatus` |
+| `remove_port` | `project` (string), `service` (string) | `"ok"` |
 | `release_project` | `name` (string) | `"ok"` |
-| `scan_active` | none | `[port, ...]` (sorted ascending) |
+| `scan_active` | none | `[ActivePort]` |
+| `list_unmanaged` | none | `[ActivePort]` (active ports >= 3000, not registered, filtered by the host blocklist) |
+| `next_range` | none | `RangeBounds` |
+| `get_config` | none | `ConfigSnapshot` |
+| `set_config` | `key` (one of `base_port`, `range_size`), `value` (string) | `"ok"` |
+| `kill_port` | `port` (int) | `KillOutcome` |
+| `kill_project` | `project` (string) | `[KillEntry]` |
+| `open_in_browser` | `port` (int) | `"ok"` |
+| `find_project_by_path` | `path` (absolute string) | `ProjectStatus` or `null` |
 
-Errors that can be returned: `invalid json: ...`, `unknown method: ...`, `missing params.<field>`, `project '<name>' not found`, `port <n> is outside project range <a>-<b>`, plus any SQLite constraint failure (e.g. duplicate project name, duplicate port).
+Type shapes (excerpt, see `crates/portsage-client/src/types.rs` for the source of truth):
+
+- `ProjectStatus`: `{ id, name, path?, range_start, range_end, created_at, ports: [PortStatus] }`
+- `PortStatus`: `{ id, project_id, service, port, active, process?, pid?, created_at }`
+- `ActivePort`: `{ port, pid, process }`
+- `RangeBounds`: `{ range_start, range_end }`
+- `ConfigSnapshot`: `{ base_port, range_size }` (string values matching the SQLite TEXT column)
+- `KillOutcome`: `"terminated" | "killed" | "not_active" | "permission_denied"`
+- `KillEntry`: `{ port, outcome: KillOutcome }`
+
+Errors that can be returned: `invalid json: ...`, `unknown method: ...`, `missing params.<field>`, `project '<name>' not found`, `port <n> is outside project range <a>-<b>`, `set_config: unsupported key '<k>'`, plus any SQLite constraint failure (e.g. duplicate project name, duplicate port).
 
 **Example session** (using `nc -U`):
 
 ```text
 > {"method":"reserve_range","params":{"name":"myapp","path":"/tmp/myapp"}}
-< {"result":{"name":"myapp","range":[4000,4009]}}
+< {"result":{"id":1,"name":"myapp","path":"/tmp/myapp","range_start":4000,"range_end":4009,"created_at":"...","ports":[]}}
 > {"method":"register_port","params":{"project":"myapp","service":"vite","port":4000}}
-< {"result":{"service":"vite","port":4000}}
+< {"result":{"id":1,"project_id":1,"service":"vite","port":4000,"active":false,"process":null,"pid":null,"created_at":"..."}}
 > {"method":"list_all"}
-< {"result":[{"id":1,"name":"myapp","path":"/tmp/myapp","range":[4000,4009],"ports":[{"service":"vite","port":4000,"active":false}]}]}
+< {"result":[{"id":1,"name":"myapp",...,"ports":[{"id":1,...,"port":4000,"active":false,...}]}]}
 ```
 
-The Python MCP server (`mcp/server.py`) is the reference client. Any other language can integrate by speaking this protocol directly.
+The Python MCP server (`mcp/server.py`) and the Rust CLI (`crates/portsage-cli`) are both reference clients. Any other language can integrate by speaking this protocol directly.
 
 ## Testing strategy
 
 Tests cover the **domain core** - port allocation, lsof parsing, socket protocol, error humanization - and the **safety-critical helpers** (e.g. parse-or-bail before merging into the user's editor config). They do not cover thin wrappers, framework plumbing, or UI rendering.
 
-- Rust tests live inline in each module under `#[cfg(test)] mod tests` and use in-memory SQLite. Run with `cd src-tauri && cargo test`.
+- Rust tests live inline in each module under `#[cfg(test)] mod tests` and use in-memory SQLite. Run the whole workspace (app + client + cli) with `cargo test` from the repo root.
 - Frontend tests live next to the source as `*.test.ts` and run via vitest. Run with `pnpm test`.
 
 The race-condition fix in `Database::create_project` has a dedicated regression test (`concurrent_create_project_produces_no_overlapping_ranges`) that spawns N threads and asserts non-overlapping ranges - it would have failed on the pre-fix code.

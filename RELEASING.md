@@ -20,8 +20,8 @@ pnpm tauri dev                # start the app in dev mode (hot reload)
 Run both suites before tagging a release. They are fast (single-digit seconds total) and have no external dependencies.
 
 ```bash
-# Rust backend (db, scanner, socket protocol, commands, race regression)
-cd src-tauri && cargo test
+# Rust workspace (app + portsage-client + portsage-cli, all under cargo test)
+cargo test
 
 # TypeScript frontend (humanizeError pattern table)
 pnpm test
@@ -45,9 +45,10 @@ Output:
 
 ### 1. Bump the version
 
-Update the version in two places:
-- `src-tauri/tauri.conf.json` -> `"version": "X.Y.Z"`
-- `package.json` -> `"version": "X.Y.Z"`
+Update the version in three places:
+- `src-tauri/tauri.conf.json` -> `"version": "X.Y.Z"` (drives the .app and DMG)
+- `package.json` -> `"version": "X.Y.Z"` (frontend package)
+- `Cargo.toml` -> `[workspace.package] version = "X.Y.Z"` (inherited by `portsage`, `portsage-client`, `portsage-cli`; drives `portsage --version`)
 
 ### 2. Build
 

@@ -1,13 +1,8 @@
-use serde::Serialize;
 use std::collections::HashSet;
 use std::process::Command;
 
-#[derive(Debug, Serialize, Clone)]
-pub struct ActivePort {
-    pub port: i64,
-    pub process: String,
-    pub pid: i64,
-}
+// Wire type shared with portsage-client. Keep the definition there.
+pub use portsage_client::ActivePort;
 
 const BLOCKED_PROCESSES: &[&str] = &[
     "rapportd",

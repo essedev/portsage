@@ -1,7 +1,8 @@
-use crate::db::{Database, ProjectWithPorts};
-use crate::scanner::{self, scan_active_ports, ActivePort};
-use serde::Serialize;
-use std::collections::HashSet;
+use crate::actions::{
+    self, KillOutcome, PortStatus, ProjectStatus,
+};
+use crate::db::Database;
+use crate::scanner::{scan_active_ports, ActivePort};
 use std::path::Path;
 use std::sync::Arc;
 use tauri::{Manager, State};
@@ -27,74 +28,9 @@ fn parse_existing_or_empty(path: &Path) -> Result<serde_json::Value, String> {
     })
 }
 
-#[derive(Debug, Serialize)]
-pub struct PortStatus {
-    pub id: i64,
-    pub project_id: i64,
-    pub service: String,
-    pub port: i64,
-    pub active: bool,
-    pub process: Option<String>,
-    pub pid: Option<i64>,
-    pub created_at: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ProjectStatus {
-    pub id: i64,
-    pub name: String,
-    pub path: Option<String>,
-    pub range_start: i64,
-    pub range_end: i64,
-    pub created_at: String,
-    pub ports: Vec<PortStatus>,
-}
-
-fn enrich_with_status(
-    projects: Vec<ProjectWithPorts>,
-    active_ports: &[ActivePort],
-) -> Vec<ProjectStatus> {
-    use std::collections::HashMap;
-    let port_map: HashMap<i64, &ActivePort> = active_ports
-        .iter()
-        .map(|ap| (ap.port, ap))
-        .collect();
-
-    projects
-        .into_iter()
-        .map(|pwp| ProjectStatus {
-            id: pwp.project.id,
-            name: pwp.project.name,
-            path: pwp.project.path,
-            range_start: pwp.project.range_start,
-            range_end: pwp.project.range_end,
-            created_at: pwp.project.created_at,
-            ports: pwp
-                .ports
-                .into_iter()
-                .map(|p| {
-                    let ap = port_map.get(&p.port);
-                    PortStatus {
-                        active: ap.is_some(),
-                        process: ap.map(|a| a.process.clone()),
-                        pid: ap.map(|a| a.pid),
-                        id: p.id,
-                        project_id: p.project_id,
-                        service: p.service,
-                        port: p.port,
-                        created_at: p.created_at,
-                    }
-                })
-                .collect(),
-        })
-        .collect()
-}
-
 #[tauri::command]
 pub fn list_projects(db: State<Arc<Database>>) -> Result<Vec<ProjectStatus>, String> {
-    let projects = db.list_projects().map_err(|e| e.to_string())?;
-    let active = scanner::scan_active_ports_detailed();
-    Ok(enrich_with_status(projects, &active))
+    actions::list_with_status(&db)
 }
 
 #[tauri::command]
@@ -152,26 +88,17 @@ pub fn remove_port(db: State<Arc<Database>>, id: i64) -> Result<(), String> {
 
 #[tauri::command]
 pub fn scan_ports() -> Vec<i64> {
-    let mut ports: Vec<i64> = scan_active_ports().into_iter().collect();
-    ports.sort();
-    ports
+    actions::scan_active_port_numbers()
 }
 
 #[tauri::command]
 pub fn list_unmanaged_ports(db: State<Arc<Database>>) -> Result<Vec<ActivePort>, String> {
-    let projects = db.list_projects().map_err(|e| e.to_string())?;
-    let registered: HashSet<i64> = projects
-        .iter()
-        .flat_map(|p| p.ports.iter().map(|port| port.port))
-        .collect();
-    let mut unmanaged = scanner::scan_unmanaged_ports(&registered);
-    unmanaged.sort_by_key(|p| p.port);
-    Ok(unmanaged)
+    actions::list_unmanaged(&db)
 }
 
 #[tauri::command]
 pub fn get_next_range(db: State<Arc<Database>>) -> Result<(i64, i64), String> {
-    db.next_available_range().map_err(|e| e.to_string())
+    actions::next_range(&db)
 }
 
 #[tauri::command]
@@ -194,97 +121,12 @@ pub fn open_in_terminal(path: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn open_in_browser(port: i64) -> Result<(), String> {
-    if !(1..=65535).contains(&port) {
-        return Err(format!("invalid port: {port}"));
-    }
-    let url = format!("http://localhost:{port}");
-    std::process::Command::new("open")
-        .arg(&url)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy)]
-#[serde(rename_all = "snake_case")]
-pub enum KillOutcome {
-    /// Process exited after SIGTERM within the grace period.
-    Terminated,
-    /// Process survived SIGTERM and was force-killed with SIGKILL.
-    Killed,
-    /// No process found listening on the port at kill time.
-    NotActive,
-    /// kill(2) returned EPERM - the process belongs to another user.
-    PermissionDenied,
-}
-
-/// 2 seconds is the empirical sweet spot: enough for Postgres-class daemons
-/// to flush and exit cleanly, short enough that the UI doesn't feel stuck.
-const KILL_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
-
-fn is_permission_error(stderr: &str) -> bool {
-    let s = stderr.to_lowercase();
-    s.contains("operation not permitted") || s.contains("not permitted")
-}
-
-/// Send SIGTERM, wait for the grace period, escalate to SIGKILL if needed.
-/// Errors from `kill` are mapped to KillOutcome rather than bubbled - the
-/// frontend only cares about the final state of the port, not which syscall
-/// returned what.
-async fn kill_pid_with_escalation(pid: i64) -> KillOutcome {
-    let term = std::process::Command::new("kill")
-        .args(["-TERM", &pid.to_string()])
-        .output();
-    match term {
-        Ok(o) if o.status.success() => {}
-        Ok(o) => {
-            let stderr = String::from_utf8_lossy(&o.stderr);
-            if is_permission_error(&stderr) {
-                return KillOutcome::PermissionDenied;
-            }
-            // "No such process" - already gone between scan and SIGTERM.
-            return KillOutcome::NotActive;
-        }
-        Err(_) => return KillOutcome::PermissionDenied,
-    }
-
-    tokio::time::sleep(KILL_GRACE).await;
-
-    // kill -0 probes existence without delivering a signal.
-    let probe = std::process::Command::new("kill")
-        .args(["-0", &pid.to_string()])
-        .output();
-    let still_alive = matches!(probe, Ok(o) if o.status.success());
-    if !still_alive {
-        return KillOutcome::Terminated;
-    }
-
-    let force = std::process::Command::new("kill")
-        .args(["-KILL", &pid.to_string()])
-        .output();
-    match force {
-        Ok(o) if o.status.success() => KillOutcome::Killed,
-        Ok(o) => {
-            let stderr = String::from_utf8_lossy(&o.stderr);
-            if is_permission_error(&stderr) {
-                KillOutcome::PermissionDenied
-            } else {
-                // Died between probe and SIGKILL - count as terminated.
-                KillOutcome::Terminated
-            }
-        }
-        Err(_) => KillOutcome::PermissionDenied,
-    }
+    actions::open_in_browser(port)
 }
 
 #[tauri::command]
 pub async fn kill_port(port: i64) -> Result<KillOutcome, String> {
-    // Fresh scan: the PID cached on the frontend can be obsolete by seconds.
-    let active = scanner::scan_active_ports_detailed();
-    let Some(target) = active.into_iter().find(|p| p.port == port) else {
-        return Ok(KillOutcome::NotActive);
-    };
-    Ok(kill_pid_with_escalation(target.pid).await)
+    Ok(actions::kill_port_action(port).await)
 }
 
 #[tauri::command]
@@ -292,43 +134,12 @@ pub async fn kill_project(
     db: State<'_, Arc<Database>>,
     project_id: i64,
 ) -> Result<Vec<(i64, KillOutcome)>, String> {
-    let projects = db.list_projects().map_err(|e| e.to_string())?;
-    let registered: HashSet<i64> = projects
-        .iter()
-        .find(|p| p.project.id == project_id)
-        .ok_or_else(|| format!("project {project_id} not found"))?
-        .ports
-        .iter()
-        .map(|p| p.port)
-        .collect();
-
-    let active: Vec<ActivePort> = scanner::scan_active_ports_detailed()
-        .into_iter()
-        .filter(|ap| registered.contains(&ap.port))
-        .collect();
-
-    // Kills run concurrently: with N active ports a sequential loop would
-    // take N * KILL_GRACE seconds (e.g. 5 ports = 10s of UI spinner). The
-    // grace period is the dominant cost, so parallelism is essentially free.
-    let handles: Vec<_> = active
-        .into_iter()
-        .map(|ap| tokio::spawn(async move { (ap.port, kill_pid_with_escalation(ap.pid).await) }))
-        .collect();
-
-    let mut results = Vec::with_capacity(handles.len());
-    for h in handles {
-        if let Ok(r) = h.await {
-            results.push(r);
-        }
-    }
-    results.sort_by_key(|(port, _)| *port);
-    Ok(results)
+    actions::kill_project_action(&db, project_id).await
 }
 
 #[tauri::command]
 pub fn get_config(db: State<Arc<Database>>) -> Result<serde_json::Value, String> {
-    let base_port = db.get_config("base_port").map_err(|e| e.to_string())?;
-    let range_size = db.get_config("range_size").map_err(|e| e.to_string())?;
+    let (base_port, range_size) = actions::get_config(&db)?;
     Ok(serde_json::json!({
         "base_port": base_port,
         "range_size": range_size,
@@ -341,7 +152,7 @@ pub fn set_config(
     key: String,
     value: String,
 ) -> Result<(), String> {
-    db.set_config(&key, &value).map_err(|e| e.to_string())
+    actions::set_config(&db, &key, &value)
 }
 
 #[tauri::command]
@@ -352,18 +163,15 @@ pub fn export_data(db: State<Arc<Database>>, dest_path: String) -> Result<(), St
         return Err("Database not found".into());
     }
 
-    // Create a zip with the db
     let file = std::fs::File::create(&dest_path).map_err(|e| e.to_string())?;
     let mut zip = zip::ZipWriter::new(file);
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
 
-    // Add database
     zip.start_file("portsage.db", options).map_err(|e| e.to_string())?;
     let db_bytes = std::fs::read(&db_path).map_err(|e| e.to_string())?;
     std::io::Write::write_all(&mut zip, &db_bytes).map_err(|e| e.to_string())?;
 
-    // Add config as JSON
     zip.start_file("config.json", options).map_err(|e| e.to_string())?;
     let base_port = db.get_config("base_port").unwrap_or("4000".into());
     let range_size = db.get_config("range_size").unwrap_or("10".into());
@@ -385,7 +193,6 @@ pub fn import_data(source_path: String) -> Result<(), String> {
     let file = std::fs::File::open(&source_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
 
-    // Extract database
     let mut db_file = archive.by_name("portsage.db").map_err(|e| e.to_string())?;
     let mut db_bytes = Vec::new();
     std::io::Read::read_to_end(&mut db_file, &mut db_bytes).map_err(|e| e.to_string())?;
@@ -441,13 +248,10 @@ pub fn get_mcp_dir(app: tauri::AppHandle) -> Result<String, String> {
         return Ok(config_mcp.to_string_lossy().to_string());
     }
 
-    // No bundled resources (dev mode without resource_dir, or unusual install): if the
-    // user already has files in the config dir, use them as-is.
     if config_mcp.join("server.py").exists() {
         return Ok(config_mcp.to_string_lossy().to_string());
     }
 
-    // Dev mode: resolve from executable location, walking up to find a sibling mcp dir.
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let dev_mcp = exe
         .ancestors()
@@ -479,6 +283,26 @@ pub fn check_mcp_installed() -> Result<bool, String> {
 
     Ok(parsed["mcpServers"]["portsage"].is_object())
 }
+
+/// Tools to allow in the user's `~/.claude/settings.json` when Portsage installs
+/// the MCP. Must stay in sync with the methods exposed by `socket.rs` and the
+/// tools defined in `mcp/server.py`.
+pub(crate) const MCP_TOOL_PERMISSIONS: &[&str] = &[
+    "mcp__portsage__list_all",
+    "mcp__portsage__reserve_range",
+    "mcp__portsage__register_port",
+    "mcp__portsage__release_project",
+    "mcp__portsage__remove_port",
+    "mcp__portsage__list_unmanaged",
+    "mcp__portsage__next_range",
+    "mcp__portsage__get_config",
+    "mcp__portsage__set_config",
+    "mcp__portsage__scan_active",
+    "mcp__portsage__kill_port",
+    "mcp__portsage__kill_project",
+    "mcp__portsage__open_in_browser",
+    "mcp__portsage__find_project_by_path",
+];
 
 #[tauri::command]
 pub fn install_mcp(mcp_dir: String) -> Result<(), String> {
@@ -514,14 +338,6 @@ pub fn install_mcp(mcp_dir: String) -> Result<(), String> {
     let settings_path = home.join(".claude").join("settings.json");
     let mut settings = parse_existing_or_empty(&settings_path)?;
 
-    let tools = vec![
-        "mcp__portsage__list_all",
-        "mcp__portsage__reserve_range",
-        "mcp__portsage__register_port",
-        "mcp__portsage__release_project",
-        "mcp__portsage__scan_active",
-    ];
-
     let allow = settings["permissions"]["allow"]
         .as_array()
         .cloned()
@@ -530,7 +346,7 @@ pub fn install_mcp(mcp_dir: String) -> Result<(), String> {
         .iter()
         .filter_map(|v| v.as_str().map(String::from))
         .collect();
-    for tool in &tools {
+    for tool in MCP_TOOL_PERMISSIONS {
         if !allow_set.contains(&tool.to_string()) {
             allow_set.push(tool.to_string());
         }
@@ -600,92 +416,6 @@ pub fn uninstall_mcp() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{Port, Project, ProjectWithPorts};
-
-    fn project(id: i64, name: &str, range: (i64, i64)) -> Project {
-        Project {
-            id,
-            name: name.into(),
-            path: None,
-            range_start: range.0,
-            range_end: range.1,
-            created_at: "now".into(),
-        }
-    }
-
-    fn port(id: i64, project_id: i64, service: &str, port: i64) -> Port {
-        Port {
-            id,
-            project_id,
-            service: service.into(),
-            port,
-            created_at: "now".into(),
-        }
-    }
-
-    fn active(port: i64, process: &str) -> ActivePort {
-        ActivePort {
-            port,
-            process: process.into(),
-            pid: 999,
-        }
-    }
-
-    #[test]
-    fn enrich_marks_active_ports_and_attaches_process_name() {
-        let projects = vec![ProjectWithPorts {
-            project: project(1, "alpha", (4000, 4009)),
-            ports: vec![port(10, 1, "vite", 4000), port(11, 1, "api", 4001)],
-        }];
-        // 4000 is active as "node", 4001 is not in the active list.
-        let active_list = vec![active(4000, "node")];
-
-        let result = enrich_with_status(projects, &active_list);
-
-        assert_eq!(result.len(), 1);
-        let p = &result[0];
-        assert_eq!(p.name, "alpha");
-        assert_eq!(p.ports.len(), 2);
-
-        let vite = p.ports.iter().find(|p| p.service == "vite").unwrap();
-        assert!(vite.active);
-        assert_eq!(vite.process.as_deref(), Some("node"));
-        // PID must travel alongside process - the UI uses it to confirm kill targets.
-        assert_eq!(vite.pid, Some(999));
-
-        let api = p.ports.iter().find(|p| p.service == "api").unwrap();
-        assert!(!api.active);
-        assert!(api.process.is_none());
-        assert!(api.pid.is_none());
-    }
-
-    #[test]
-    fn enrich_with_no_active_ports_marks_everything_inactive() {
-        let projects = vec![ProjectWithPorts {
-            project: project(1, "alpha", (4000, 4009)),
-            ports: vec![port(10, 1, "vite", 4000)],
-        }];
-        let result = enrich_with_status(projects, &[]);
-        assert!(!result[0].ports[0].active);
-        assert!(result[0].ports[0].process.is_none());
-        assert!(result[0].ports[0].pid.is_none());
-    }
-
-    #[test]
-    fn enrich_active_port_outside_any_project_is_ignored() {
-        // 9999 is active but not registered to any project. enrich_with_status
-        // only annotates registered ports - unmanaged ports go through a
-        // different code path - so this should not affect the result.
-        let projects = vec![ProjectWithPorts {
-            project: project(1, "alpha", (4000, 4009)),
-            ports: vec![port(10, 1, "vite", 4000)],
-        }];
-        let active_list = vec![active(9999, "node")];
-
-        let result = enrich_with_status(projects, &active_list);
-        assert_eq!(result[0].ports.len(), 1);
-        assert!(!result[0].ports[0].active);
-    }
 
     // --- parse_existing_or_empty ---
 
@@ -708,9 +438,7 @@ mod tests {
 
     #[test]
     fn parse_existing_or_empty_bails_on_malformed_json() {
-        // This is the safety-critical case: if the user's claude.json is broken,
-        // we MUST refuse to overwrite it - falling back to {} would destroy
-        // all their other MCP servers and editor settings.
+        // Safety-critical: a broken claude.json must not be silently replaced with {}.
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("broken.json");
         std::fs::write(&path, "{ this is not valid json").unwrap();
@@ -731,8 +459,6 @@ mod tests {
 
     #[test]
     fn parse_existing_or_empty_handles_empty_file_as_corrupt() {
-        // An empty file is not valid JSON. It must be treated as corrupt
-        // (refusal), not silently turned into {}.
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("empty.json");
         std::fs::write(&path, "").unwrap();
@@ -742,7 +468,6 @@ mod tests {
 
     #[test]
     fn parse_existing_or_empty_accepts_empty_object() {
-        // {} on disk is valid and should round-trip.
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("empty-obj.json");
         std::fs::write(&path, "{}").unwrap();
@@ -750,49 +475,35 @@ mod tests {
         assert_eq!(result, serde_json::json!({}));
     }
 
-    // --- is_permission_error ---
-
     #[test]
-    fn is_permission_error_matches_macos_and_linux_phrasing() {
-        // macOS bash: "kill: (12345) - Operation not permitted"
-        assert!(is_permission_error("kill: (12345) - Operation not permitted"));
-        // bsd kill: "kill: 12345: Operation not permitted"
-        assert!(is_permission_error("kill: 12345: Operation not permitted"));
-        // Case-insensitive match defends against shell capitalization drift.
-        assert!(is_permission_error("OPERATION NOT PERMITTED"));
-    }
-
-    #[test]
-    fn is_permission_error_rejects_other_failures() {
-        assert!(!is_permission_error("kill: (12345) - No such process"));
-        assert!(!is_permission_error(""));
-    }
-
-    #[test]
-    fn enrich_preserves_project_order_and_metadata() {
-        let projects = vec![
-            ProjectWithPorts {
-                project: Project {
-                    id: 1,
-                    name: "alpha".into(),
-                    path: Some("/tmp/alpha".into()),
-                    range_start: 4000,
-                    range_end: 4009,
-                    created_at: "t1".into(),
-                },
-                ports: vec![],
-            },
-            ProjectWithPorts {
-                project: project(2, "bravo", (4010, 4019)),
-                ports: vec![],
-            },
-        ];
-        let result = enrich_with_status(projects, &[]);
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0].name, "alpha");
-        assert_eq!(result[0].path.as_deref(), Some("/tmp/alpha"));
-        assert_eq!(result[0].range_start, 4000);
-        assert_eq!(result[0].range_end, 4009);
-        assert_eq!(result[1].name, "bravo");
+    fn mcp_tool_permissions_cover_socket_methods() {
+        // The MCP permissions list and the methods dispatched by the socket
+        // must stay in lockstep. The set below is the contract surfaced in
+        // SKILL.md and registered into ~/.claude/settings.json on install.
+        let names: Vec<&str> = MCP_TOOL_PERMISSIONS
+            .iter()
+            .map(|s| s.trim_start_matches("mcp__portsage__"))
+            .collect();
+        for expected in [
+            "list_all",
+            "reserve_range",
+            "register_port",
+            "release_project",
+            "remove_port",
+            "list_unmanaged",
+            "next_range",
+            "get_config",
+            "set_config",
+            "scan_active",
+            "kill_port",
+            "kill_project",
+            "open_in_browser",
+            "find_project_by_path",
+        ] {
+            assert!(
+                names.contains(&expected),
+                "MCP_TOOL_PERMISSIONS missing tool: {expected}",
+            );
+        }
     }
 }

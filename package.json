@@ -1,7 +1,7 @@
 {
   "name": "portsage",
   "private": true,
-  "version": "0.8.3",
+  "version": "0.9.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:cli": "bash scripts/build-cli.sh"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",

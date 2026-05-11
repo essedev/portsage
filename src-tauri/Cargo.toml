@@ -1,9 +1,9 @@
 [package]
 name = "portsage"
-version = "0.1.0"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
 description = "Port allocation manager for macOS"
-authors = ["Simone Salerno"]
-edition = "2021"
 
 [lib]
 name = "portsage_lib"
@@ -23,7 +23,8 @@ serde_json = "1"
 rusqlite = { version = "0.34", features = ["bundled"] }
 dirs = "6"
 zip = { version = "2", default-features = false, features = ["deflate"] }
-tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "macros", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "macros", "time", "signal"] }
+portsage-client = { path = "../crates/portsage-client" }
 
 [dev-dependencies]
 tempfile = "3"

@@ -25,39 +25,17 @@ Not shipped:
 
 ---
 
-## 3. CLI
+## 3. CLI - DONE
 
-**Priority**: medium. Unlocks scripting/CI use cases the GUI does not cover.
+Shipped: a `portsage` binary in Rust, bundled inside `Portsage.app` and exposed on PATH via the Homebrew cask. Talks to the Tauri backend over the same Unix socket as the MCP server, auto-spawning the backend in `--headless` mode (no tray, no windows, socket only) when no instance is running.
 
-### What it does
-A `portsage` terminal command that talks to the Tauri backend via the same Unix socket the MCP server uses.
+Subcommands (full parity with the MCP surface): `list` (`--here`, `--project`, `--active`), `status`, `reserve` (`--here`, `--path`), `register` (`--here`, `--project`), `remove`, `release`, `scan` (`--unmanaged`), `kill`, `kill-project`, `open`, `config get|set`, `doctor`. Destructive ops require interactive confirmation or `-y`; piped invocations without `-y` refuse to act so they cannot silently auto-accept.
 
-### Planned commands
-```bash
-portsage list                              # all projects and ports
-portsage list --active                     # only active ports
-portsage list --project myapp              # ports of a specific project
-portsage reserve myapp                     # reserve a range for a new project
-portsage reserve myapp --size 20           # custom range
-portsage register myapp vite 4000          # register a service
-portsage release myapp                     # release a range
-portsage scan                              # active ports on the machine
-portsage scan --unmanaged                  # only unmanaged ports
-portsage kill 4000                         # kill the process on a port
-portsage open 4000                         # open in browser
-portsage --json                            # JSON output for scripting
-```
+Output modes: human (colored on TTY via anstream/anstyle), `--json` (raw protocol payloads), `-q/--quiet` (tab-separated, no headers). Exit codes follow the spec: 0 ok, 1 generic, 2 usage, 3 backend unreachable, 4 not found, 5 conflict.
 
-### Implementation
-- A separate `portsage-cli` binary in Rust within the monorepo
-- Reuses the same protocol as the MCP server (Unix socket -> Tauri backend)
-- Distribution: bundled inside the `.dmg`, symlinked to `/usr/local/bin/portsage` on first launch
-- Homebrew: the formula installs the CLI binary too
+Architecture: Cargo workspace with three members - `src-tauri/` (the app, in place), `crates/portsage-client/` (sync UnixStream client and wire types, single source of truth), `crates/portsage-cli/` (clap-based binary). The socket protocol grew from 5 methods to 14 to match the GUI surface (see `CHANGELOG.md` [Unreleased]). The MCP server picked up the same 9 new tools so Claude can drive everything the CLI can.
 
-### Output
-- Default: colored ASCII table
-- `--json`: for scripting
-- `--quiet`: only essential data
+Deferred to follow-ups: `--size` per-reserve override (backend has a global `range_size` config; would need a new socket op), shell completions, watch/streaming mode (requires socket pub/sub).
 
 ---
 
@@ -172,7 +150,7 @@ Replaces hardcoded UI strings with translation keys, adds a language switcher in
 
 1. ~~**Kill process** - unblocks the basic workflow, parity with competitors~~ (done)
 2. ~~**Open in browser** - low effort, high value~~ (done)
-3. **CLI** - opens new use cases (scripting, CI)
+3. ~~**CLI** - opens new use cases (scripting, CI)~~ (done)
 4. **i18n and language switcher** - reaches Italian-speaking users and any future locale
 5. **Notifications** - added value, differentiator
 6. **Tags and colors** - polish, last step

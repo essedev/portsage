@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-11
+
+### Added
+- `portsage` CLI bundled inside the .app and exposed on PATH via the Homebrew cask. Full parity with the MCP server: `list`, `status`, `reserve`, `register`, `remove`, `release`, `scan`, `kill`, `kill-project`, `open`, `config get|set`, `doctor`. `--here` derives the project from the current directory. Output modes: human (colored on TTY), `--json` for scripting, `--quiet` for pipes. Destructive ops require interactive confirmation or `-y`. Exit codes: `0` ok, `1` generic, `2` usage, `3` backend unreachable, `4` not found, `5` conflict
+- `--headless` (`-H`) mode: the Tauri binary runs the Unix-socket server only, with no tray or windows. Used by the CLI to auto-spawn the backend if no instance is running. SIGINT/SIGTERM trigger clean shutdown. Probes the socket first and exits cleanly when another instance (GUI or headless) is already serving
+- Extended the Unix socket protocol with 9 new methods to match the GUI surface: `remove_port`, `list_unmanaged`, `next_range`, `get_config`, `set_config` (whitelists `base_port` / `range_size`), `kill_port`, `kill_project`, `open_in_browser`, `find_project_by_path`. `list_all` now returns project ids, ranges, `created_at`, and per-port `pid` / `process`; `reserve_range` returns the new project's id; `register_port` returns the new port's id
+- MCP server gained the matching 9 tools so Claude can drive the full surface (kill zombies, open URLs, peek the next range, mutate config, look up projects by path)
+
+### Changed
+- Repo restructured into a Cargo workspace: `src-tauri/` (the existing Tauri app, unchanged in place), `crates/portsage-client/` (sync `UnixStream` client + wire types - single source of truth, consumed by both the app's tests and the CLI), `crates/portsage-cli/` (clap-based binary). One shared `Cargo.lock` at the root, one shared `target/`
+- `src-tauri/src/commands.rs` is now a thin Tauri wrapper over the new `actions.rs` module, which hosts pure logic shared between the Tauri commands and the socket dispatcher
+- All workspace crates inherit `version` from `[workspace.package]` in the root `Cargo.toml`, so `portsage --version` always matches the app release
+
 ## [0.8.3] - 2026-05-11
 
 ### Changed

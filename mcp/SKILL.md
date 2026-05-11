@@ -3,45 +3,71 @@ name: portsage
 description: >
   Manages port allocation across development projects.
   Use it when you need to assign ports to a new project, register services,
-  or check which ports are in use.
+  kill stuck processes, or check which ports are in use.
 ---
 
 # Portsage - Port Allocation Manager
 
-Access to the local port database via the Portsage app.
+Access to the local port database via the Portsage app, with full parity to
+its UI: read state, mutate state, and act on live ports (kill / open).
 
 ## Available tools
 
-### list_all
-Shows all registered projects with their port range, services, and active state.
-Use this as the first step to understand the current situation.
+### Read
 
-### reserve_range
-Reserves the next free port range for a new project.
-- `project_name`: project name (e.g. "my-app")
-- `path`: optional path to the project directory
+- **list_all** - all registered projects with their range, ports, active state,
+  and resolved process name + pid for each active port. Always call first.
+- **scan_active** - every TCP port currently in LISTEN on the machine
+  ({port, process, pid}).
+- **list_unmanaged** - active ports >= 3000 not registered to any project and
+  not on the system-services blocklist. Use to find zombies.
+- **next_range** - peek the next free range without reserving.
+- **get_config** - returns {base_port, range_size}.
+- **find_project_by_path** - given an absolute path (e.g. a working directory),
+  returns the project whose registered path equals it or is an ancestor, or
+  null. Useful to scope subsequent calls without asking the user.
 
-### register_port
-Registers a specific port for a service inside a project's range.
-- `project_name`: project name
-- `service`: service name (e.g. "vite", "postgres", "redis", "minio")
-- `port`: port number (must be inside the project's range)
+### Mutate registry
 
-### release_project
-Releases a project's port range.
-- `project_name`: name of the project to release
+- **reserve_range(project_name, path?)** - reserves the next free range. Pass
+  `path` so future `find_project_by_path` calls resolve correctly.
+- **register_port(project_name, service, port)** - adds a port to a project's
+  range. Returns the row including its id.
+- **remove_port(project_name, service)** - removes a single port.
+- **release_project(project_name)** - releases the whole range.
+- **set_config(key, value)** - only `base_port` and `range_size` are accepted.
 
-### scan_active
-Scans all active TCP ports on the machine.
+### Act on live ports
 
-## Recommended workflow
+- **kill_port(port)** - SIGTERM with 2s grace, then SIGKILL. Returns
+  {outcome: terminated | killed | not_active | permission_denied}.
+- **kill_project(project_name)** - kills every active port for a project in
+  parallel. Returns a list of {port, outcome}.
+- **open_in_browser(port)** - opens http://localhost:<port> in the default
+  browser. Returns "ok".
 
-When assigning ports to a new project:
-1. Call `list_all` to see which ranges are taken
-2. Call `reserve_range` with the project name
-3. Use the assigned range's ports in docker-compose.yml and vite.config
-4. Call `register_port` for each configured service
+## Recommended workflows
 
-When checking conflicts:
-1. Call `scan_active` to see active ports
-2. Call `list_all` to cross-reference with registered ports
+### Assigning ports to a new project
+1. Call `list_all` to see the current allocation.
+2. Call `reserve_range(name, path)` - always pass `path` if you know it.
+3. Call `register_port` for each configured service. Use the assigned
+   range's ports in docker-compose.yml and vite.config.
+
+### Identifying and freeing a stuck port
+1. Call `scan_active` (or `list_all`) to find the port and its pid/process.
+2. If it's registered: `kill_port(port)`. If unregistered: same.
+3. The result tells you whether it terminated gracefully, was forcibly
+   killed, or was already gone.
+
+### Working from inside a project directory
+1. Call `find_project_by_path(pwd)` to resolve the project the user is in.
+2. From there: `kill_project`, `release_project`, or `register_port` against
+   that project, without asking the user to repeat its name.
+
+## Error handling
+
+Every tool returns `{"error": "..."}` on failure. The two most common cases:
+- `"Portsage app is not running. Start it first."` - the Unix socket is
+  missing. The user must launch the menubar app.
+- `"project 'X' not found"` - the project name does not exist in the registry.

@@ -12,8 +12,12 @@ dist
 dist-ssr
 *.local
 
-# Tauri
+# Rust / Cargo workspace
+/target/
 src-tauri/target/
+
+# Staged sidecar binaries (built by scripts/build-cli.sh, bundled via externalBin)
+src-tauri/binaries/
 
 # Python
 mcp/.venv/
