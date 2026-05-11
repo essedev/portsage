@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-05-11
+
+### Changed
+- Kill (Power) buttons use the neutral ghost variant instead of danger red. Stopping a process is reversible and doesn't warrant the same alarm color as project/port deletion; the trash icon remains red for true destructive actions
+
 ## [0.8.2] - 2026-05-11
 
 ### Fixed

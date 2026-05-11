@@ -37,7 +37,7 @@ export function PortRow({ port, onRemove, onKill }: PortRowProps) {
       <div className="w-6 flex justify-center shrink-0">
         {onKill && port.active && (
           <UIButton
-            variant="danger"
+            variant="ghost"
             size="icon-sm"
             className="opacity-0 group-hover:opacity-100"
             title="Stop process on this port"

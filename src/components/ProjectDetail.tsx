@@ -172,7 +172,6 @@ export function ProjectDetail({
                 ? "No active ports to stop"
                 : `Stop all ${activePorts} active port${activePorts === 1 ? "" : "s"}`
             }
-            className="text-accent-danger hover:bg-accent-danger-soft hover:text-accent-danger"
           >
             <Power size={16} />
           </UIButton>

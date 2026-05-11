@@ -91,7 +91,7 @@ export function UnmanagedPortsPanel({ ports, onKill }: UnmanagedPortsPanelProps)
                 <UIButton
                   variant="ghost"
                   size="icon-sm"
-                  className="opacity-0 group-hover:opacity-100 text-accent-danger hover:bg-accent-danger-soft hover:text-accent-danger"
+                  className="opacity-0 group-hover:opacity-100"
                   title="Stop process on this port"
                   onClick={() => handleKill(port)}
                 >
