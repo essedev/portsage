@@ -35,7 +35,17 @@ Output modes: human (colored on TTY via anstream/anstyle), `--json` (raw protoco
 
 Architecture: Cargo workspace with three members - `src-tauri/` (the app, in place), `crates/portsage-client/` (sync UnixStream client and wire types, single source of truth), `crates/portsage-cli/` (clap-based binary). The socket protocol grew from 5 methods to 14 to match the GUI surface (see `CHANGELOG.md` [Unreleased]). The MCP server picked up the same 9 new tools so Claude can drive everything the CLI can.
 
-Deferred to follow-ups: `--size` per-reserve override (backend has a global `range_size` config; would need a new socket op), shell completions, watch/streaming mode (requires socket pub/sub).
+Deferred to follow-ups:
+- `--size N` per-reserve override (backend has a global `range_size` config; would need a new socket op)
+- Shell completions (clap can emit them; the install paths vary by shell)
+- Watch / streaming mode (requires socket pub/sub - bigger architectural change)
+- Autospawn UX: the 3s timeout (`AUTOSPAWN_TIMEOUT` in `crates/portsage-client/src/client.rs`) is occasionally too short on the first spawn after install. Raise it, or make the polling adaptive (back off, longer ceiling on first attempt)
+- Hint in `--help` / error output that `-y` is subcommand-scoped (`portsage release foo -y`, not `portsage -y release foo`) - or promote it to a global flag
+
+Open design questions (not blocking, but pick one before adding to the CLI):
+- `register <service>` without an explicit port: auto-allocate a free port inside the project's range? (Most ergonomic default, but easy to get wrong if multiple ports race)
+- `reserve --here` without a name: derive from `git remote get-url origin` before falling back to `basename(pwd)`?
+- `kill-project` output: line-by-line per port (current) or summary (`3 terminated, 1 permission_denied`)?
 
 ---
 
