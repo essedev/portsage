@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-05-11
+
+### Fixed
+- CLI autospawn timeout raised from 3s to 8s. The first `portsage <cmd>` after a fresh install was occasionally timing out before the freshly-spawned headless backend bound the socket - cold launches on macOS pay a Gatekeeper xattr scan + dyld cache priming cost that can take several seconds. Warm spawns are unaffected
+
+### Changed
+- `-y` / `--yes` promoted to a global flag. Both `portsage release foo -y` and `portsage -y release foo` work; previously only the first did, and the second confusingly errored with `unexpected argument '-y'`
+
 ## [0.9.0] - 2026-05-11
 
 ### Added

@@ -37,6 +37,12 @@ pub struct GlobalOpts {
     /// Override the Unix socket path (mainly for tests).
     #[arg(long, global = true, env = "PORTSAGE_SOCKET")]
     pub socket: Option<std::path::PathBuf>,
+
+    /// Skip the confirmation prompt on destructive commands (`release`, `kill`,
+    /// `kill-project`). Global so it works in either position:
+    /// `portsage -y release foo` and `portsage release foo -y` are equivalent.
+    #[arg(long, short = 'y', global = true)]
+    pub yes: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -98,9 +104,6 @@ pub enum Command {
         name: Option<String>,
         #[arg(long)]
         here: bool,
-        /// Skip the confirmation prompt.
-        #[arg(long, short = 'y')]
-        yes: bool,
     },
 
     /// Scan the machine for active TCP ports.
@@ -114,8 +117,6 @@ pub enum Command {
     /// Kill the process listening on a port (SIGTERM, grace, SIGKILL).
     Kill {
         port: i64,
-        #[arg(long, short = 'y')]
-        yes: bool,
     },
 
     /// Kill every active port registered to a project, in parallel.
@@ -123,8 +124,6 @@ pub enum Command {
         name: Option<String>,
         #[arg(long)]
         here: bool,
-        #[arg(long, short = 'y')]
-        yes: bool,
     },
 
     /// Open a port (or a service in the current/named project) in the browser.

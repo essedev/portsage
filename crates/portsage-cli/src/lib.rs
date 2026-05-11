@@ -402,6 +402,7 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
     let mode = OutputMode::from_flags(cli.global.json, cli.global.quiet);
     let client = make_client(&cli.global);
 
+    let yes = cli.global.yes;
     match cli.command {
         Command::List { here, project, active } => cmd_list(&client, mode, here, project, active),
         Command::Status => cmd_status(&client, mode),
@@ -412,10 +413,10 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
         Command::Remove { service, project, here } => {
             cmd_remove(&client, mode, service, project, here)
         }
-        Command::Release { name, here, yes } => cmd_release(&client, mode, name, here, yes),
+        Command::Release { name, here } => cmd_release(&client, mode, name, here, yes),
         Command::Scan { unmanaged } => cmd_scan(&client, mode, unmanaged),
-        Command::Kill { port, yes } => cmd_kill(&client, mode, port, yes),
-        Command::KillProject { name, here, yes } => {
+        Command::Kill { port } => cmd_kill(&client, mode, port, yes),
+        Command::KillProject { name, here } => {
             cmd_kill_project(&client, mode, name, here, yes)
         }
         Command::Open { target, project, here } => cmd_open(&client, mode, target, project, here),
@@ -509,6 +510,7 @@ mod tests {
             no_autospawn: true,
             app: None,
             socket: Some(path),
+            yes: false,
         }
     }
 
@@ -540,7 +542,6 @@ mod tests {
             command: Command::Release {
                 name: Some("alpha".into()),
                 here: false,
-                yes: false,
             },
         };
         let result = run(cli);
@@ -556,12 +557,13 @@ mod tests {
             assert!(req.contains("\"method\":\"release_project\""));
             r#"{"result":"ok"}"#.into()
         });
+        let mut global = opts_with_socket(path);
+        global.yes = true;
         let cli = Cli {
-            global: opts_with_socket(path),
+            global,
             command: Command::Release {
                 name: Some("alpha".into()),
                 here: false,
-                yes: true,
             },
         };
         let result = run(cli);

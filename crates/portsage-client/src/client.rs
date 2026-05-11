@@ -19,9 +19,11 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 pub const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long the autospawn flow polls for the socket file after launching the
-/// backend. The backend binds the socket within the first few hundred ms;
-/// 3 s is comfortable headroom.
-pub const AUTOSPAWN_TIMEOUT: Duration = Duration::from_secs(3);
+/// backend. Warm spawns bind the socket in a few hundred ms, but a cold first
+/// launch after install can take several seconds on macOS (Gatekeeper xattr
+/// scan, dyld cache priming, etc.). 8 s covers the slow path without making
+/// real failures (binary missing, permission denied) feel hung.
+pub const AUTOSPAWN_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// Interval between socket-existence polls during autospawn.
 pub const AUTOSPAWN_POLL_INTERVAL: Duration = Duration::from_millis(50);
