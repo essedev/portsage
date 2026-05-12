@@ -17,11 +17,13 @@ jobs:
         include:
           - os: macos-latest
             cargo-flags: ""
+            needs-cli-sidecar: true
           # The Linux runner builds with `--no-default-features` so the
           # workspace skips the Tauri toolchain (which would need GTK +
           # webkit2gtk system packages just to compile).
           - os: ubuntu-latest
             cargo-flags: "--no-default-features"
+            needs-cli-sidecar: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +33,14 @@ jobs:
           components: clippy
 
       - uses: Swatinem/rust-cache@v2
+
+      # The Tauri build.rs reads tauri.conf.json's `externalBin` section and
+      # fails if the staged sidecar binary is missing - even for `cargo test`.
+      # Stage it before invoking cargo on the GUI lane. The Linux lane builds
+      # without the `gui` feature so tauri-build is skipped entirely.
+      - name: Stage portsage-cli sidecar (GUI lane only)
+        if: matrix.needs-cli-sidecar
+        run: bash scripts/build-cli.sh
 
       # The macOS lane builds the full Tauri app and runs its tests. The Linux
       # lane builds only the headless server crates plus portsage-client and

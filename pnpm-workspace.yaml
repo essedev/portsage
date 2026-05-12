@@ -1,3 +1,9 @@
+# Declares this repo as a single-package pnpm workspace. The `packages` field
+# is mandatory for tools that probe the workspace (e.g. `actions/setup-node@v4`
+# with `cache: pnpm` calls `pnpm store path` which refuses to run without it).
+packages:
+  - .
+
 allowBuilds:
   esbuild: set this to true or false
 approveBuilds: esbuild
