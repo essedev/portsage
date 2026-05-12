@@ -49,6 +49,16 @@ pub struct RemoteBackendInput<'a> {
     pub auto_forward_enabled: bool,
 }
 
+/// A port the user has explicitly blocked from auto-forwarding for a given
+/// remote backend. Phase 3 of the multi-host evolution.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ForwardExclusion {
+    pub id: i64,
+    pub backend_id: i64,
+    pub port: i64,
+    pub created_at: String,
+}
+
 pub struct Database {
     pub conn: Mutex<Connection>,
 }
@@ -135,6 +145,21 @@ impl Database {
                 local_socket_path TEXT NOT NULL,
                 auto_forward_enabled INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            -- Phase 3 of the multi-host evolution: per-backend blocklist of
+            -- ports the user does not want auto-forwarded (e.g. port 4060 is
+            -- in use locally by something else and they don't want Portsage
+            -- to fight it). One row per excluded port; uniqueness is on
+            -- (backend_id, port). Foreign key is informational - the cleanup
+            -- on backend removal happens in code so we keep error reporting
+            -- consistent with the rest of the CRUD path.
+            CREATE TABLE IF NOT EXISTS forward_exclusions (
+                id INTEGER PRIMARY KEY,
+                backend_id INTEGER NOT NULL REFERENCES remote_backends(id),
+                port INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(backend_id, port)
             );",
         )?;
         Ok(())
@@ -414,6 +439,13 @@ impl Database {
 
     pub fn delete_remote_backend(&self, id: i64) -> Result<()> {
         let conn = self.conn();
+        // Drop dependent rows first so the foreign key isn't orphaned. The
+        // schema doesn't declare ON DELETE CASCADE - we run rusqlite without
+        // foreign_keys=ON anyway - so the cascade is in code.
+        conn.execute(
+            "DELETE FROM forward_exclusions WHERE backend_id = ?1",
+            params![id],
+        )?;
         conn.execute("DELETE FROM remote_backends WHERE id = ?1", params![id])?;
         Ok(())
     }
@@ -427,6 +459,77 @@ impl Database {
             row_to_remote_backend,
         )
     }
+
+    // --- forward_exclusions ---
+
+    pub fn list_forward_exclusions(&self, backend_id: i64) -> Result<Vec<ForwardExclusion>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT id, backend_id, port, created_at \
+             FROM forward_exclusions WHERE backend_id = ?1 ORDER BY port",
+        )?;
+        let rows: Vec<ForwardExclusion> = stmt
+            .query_map(params![backend_id], row_to_forward_exclusion)?
+            .collect::<Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    pub fn add_forward_exclusion(&self, backend_id: i64, port: i64) -> Result<ForwardExclusion> {
+        if !(1..=65535).contains(&port) {
+            return Err(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CONSTRAINT),
+                Some(format!("port {port} is out of range (1-65535)")),
+            ));
+        }
+        let conn = self.conn();
+        conn.execute(
+            "INSERT INTO forward_exclusions (backend_id, port) VALUES (?1, ?2)",
+            params![backend_id, port],
+        )?;
+        let id = conn.last_insert_rowid();
+        conn.query_row(
+            "SELECT id, backend_id, port, created_at \
+             FROM forward_exclusions WHERE id = ?1",
+            params![id],
+            row_to_forward_exclusion,
+        )
+    }
+
+    pub fn remove_forward_exclusion(&self, id: i64) -> Result<()> {
+        let conn = self.conn();
+        conn.execute("DELETE FROM forward_exclusions WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn remove_forward_exclusion_by_port(&self, backend_id: i64, port: i64) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(
+            "DELETE FROM forward_exclusions WHERE backend_id = ?1 AND port = ?2",
+            params![backend_id, port],
+        )?;
+        Ok(())
+    }
+
+    /// Cascade for `delete_remote_backend`: drops any excluded-port rows that
+    /// point at the dropped backend. Called by the backend deletion path so
+    /// the table doesn't accumulate orphan rows.
+    pub fn delete_forward_exclusions_for_backend(&self, backend_id: i64) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(
+            "DELETE FROM forward_exclusions WHERE backend_id = ?1",
+            params![backend_id],
+        )?;
+        Ok(())
+    }
+}
+
+fn row_to_forward_exclusion(row: &rusqlite::Row<'_>) -> Result<ForwardExclusion> {
+    Ok(ForwardExclusion {
+        id: row.get(0)?,
+        backend_id: row.get(1)?,
+        port: row.get(2)?,
+        created_at: row.get(3)?,
+    })
 }
 
 fn validate_remote_backend_input(input: &RemoteBackendInput<'_>) -> Result<()> {
@@ -799,5 +902,103 @@ mod tests {
         let db = fresh_db();
         let err = db.set_remote_backend_auto_forward(9999, true).unwrap_err();
         assert!(err.to_string().contains("not found"));
+    }
+
+    // --- forward_exclusions ---
+
+    fn make_backend(db: &Database, name: &str) -> RemoteBackend {
+        db.create_remote_backend(input(name, "alias")).unwrap()
+    }
+
+    #[test]
+    fn forward_exclusion_add_then_list() {
+        let db = fresh_db();
+        let b = make_backend(&db, "dev");
+        let e = db.add_forward_exclusion(b.id, 4060).unwrap();
+        assert_eq!(e.backend_id, b.id);
+        assert_eq!(e.port, 4060);
+        let all = db.list_forward_exclusions(b.id).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].port, 4060);
+    }
+
+    #[test]
+    fn forward_exclusion_list_orders_by_port() {
+        let db = fresh_db();
+        let b = make_backend(&db, "dev");
+        db.add_forward_exclusion(b.id, 4070).unwrap();
+        db.add_forward_exclusion(b.id, 4060).unwrap();
+        db.add_forward_exclusion(b.id, 4080).unwrap();
+        let ports: Vec<i64> = db
+            .list_forward_exclusions(b.id)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.port)
+            .collect();
+        assert_eq!(ports, [4060, 4070, 4080]);
+    }
+
+    #[test]
+    fn forward_exclusion_duplicate_rejected() {
+        // The unique constraint protects the sync logic from "is 4060 excluded?"
+        // returning a list with duplicates - we'd waste branches checking
+        // both rows.
+        let db = fresh_db();
+        let b = make_backend(&db, "dev");
+        db.add_forward_exclusion(b.id, 4060).unwrap();
+        let err = db.add_forward_exclusion(b.id, 4060);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn forward_exclusion_same_port_on_different_backends_ok() {
+        let db = fresh_db();
+        let a = make_backend(&db, "dev");
+        let b = make_backend(&db, "stage");
+        db.add_forward_exclusion(a.id, 4060).unwrap();
+        db.add_forward_exclusion(b.id, 4060).unwrap();
+        assert_eq!(db.list_forward_exclusions(a.id).unwrap().len(), 1);
+        assert_eq!(db.list_forward_exclusions(b.id).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn forward_exclusion_out_of_range_port_rejected() {
+        let db = fresh_db();
+        let b = make_backend(&db, "dev");
+        assert!(db.add_forward_exclusion(b.id, 0).is_err());
+        assert!(db.add_forward_exclusion(b.id, 70000).is_err());
+        assert!(db.add_forward_exclusion(b.id, -1).is_err());
+    }
+
+    #[test]
+    fn forward_exclusion_remove_by_id_and_by_port() {
+        let db = fresh_db();
+        let b = make_backend(&db, "dev");
+        let e1 = db.add_forward_exclusion(b.id, 4060).unwrap();
+        db.add_forward_exclusion(b.id, 4070).unwrap();
+        db.remove_forward_exclusion(e1.id).unwrap();
+        let ports: Vec<i64> = db
+            .list_forward_exclusions(b.id)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.port)
+            .collect();
+        assert_eq!(ports, [4070]);
+
+        db.remove_forward_exclusion_by_port(b.id, 4070).unwrap();
+        assert!(db.list_forward_exclusions(b.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn delete_remote_backend_cascades_forward_exclusions() {
+        // Regression guard: deleting a backend used to leave orphan exclusion
+        // rows behind, which the sync logic would then read for a backend
+        // that no longer exists.
+        let db = fresh_db();
+        let b = make_backend(&db, "dev");
+        db.add_forward_exclusion(b.id, 4060).unwrap();
+        db.add_forward_exclusion(b.id, 4061).unwrap();
+        db.delete_remote_backend(b.id).unwrap();
+        assert!(db.list_forward_exclusions(b.id).unwrap().is_empty());
     }
 }

@@ -1,6 +1,7 @@
 use crate::actions::{self, KillOutcome, PortStatus, ProjectStatus};
 use crate::backends::{BackendRouter, BackendTarget, RemoteBackendForm, TunnelStatus};
-use crate::db::{Database, RemoteBackend};
+use crate::db::{Database, ForwardExclusion, RemoteBackend};
+use crate::forwards::{ForwardManager, ForwardStatus};
 use crate::scanner::ActivePort;
 use portsage_client::{ConfigSnapshot, KillEntry, RangeBounds};
 use std::path::Path;
@@ -561,6 +562,88 @@ fn emit_tunnel_status(app: &tauri::AppHandle, router: &BackendRouter, name: &str
     {
         let _ = app.emit(TUNNEL_EVENT, status);
     }
+}
+
+// === Forwards (Phase 3) ===
+
+/// Tauri event emitted when one or more forwards change state. The payload
+/// is a `Vec<ForwardStatus>` (a delta snapshot for the affected backend),
+/// not a single entry, so the frontend can render the whole row in one
+/// update.
+pub const FORWARD_EVENT: &str = "forward://state-changed";
+
+#[tauri::command]
+pub fn list_forward_statuses(
+    forwards: State<Arc<ForwardManager>>,
+    backend: String,
+) -> Result<Vec<ForwardStatus>, String> {
+    Ok(forwards.statuses_for(&backend))
+}
+
+#[tauri::command]
+pub fn enable_forward(
+    app: tauri::AppHandle,
+    forwards: State<Arc<ForwardManager>>,
+    backend: String,
+    port: i64,
+) -> Result<ForwardStatus, String> {
+    let result = forwards.enable(&backend, port).map_err(|e| e.to_string());
+    let _ = app.emit(FORWARD_EVENT, forwards.statuses_for(&backend));
+    result
+}
+
+#[tauri::command]
+pub fn disable_forward(
+    app: tauri::AppHandle,
+    forwards: State<Arc<ForwardManager>>,
+    backend: String,
+    port: i64,
+) -> Result<ForwardStatus, String> {
+    let result = forwards.disable(&backend, port).map_err(|e| e.to_string());
+    let _ = app.emit(FORWARD_EVENT, forwards.statuses_for(&backend));
+    result
+}
+
+#[tauri::command]
+pub fn sync_forwards(
+    app: tauri::AppHandle,
+    forwards: State<Arc<ForwardManager>>,
+    backend: String,
+) -> Result<Vec<ForwardStatus>, String> {
+    let result = forwards.sync(&backend).map_err(|e| e.to_string());
+    let _ = app.emit(FORWARD_EVENT, forwards.statuses_for(&backend));
+    result
+}
+
+#[tauri::command]
+pub fn list_forward_exclusions(
+    router: State<Arc<BackendRouter>>,
+    backend_id: i64,
+) -> Result<Vec<ForwardExclusion>, String> {
+    router
+        .database()
+        .list_forward_exclusions(backend_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn add_forward_exclusion(
+    router: State<Arc<BackendRouter>>,
+    backend_id: i64,
+    port: i64,
+) -> Result<ForwardExclusion, String> {
+    router
+        .database()
+        .add_forward_exclusion(backend_id, port)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn remove_forward_exclusion(router: State<Arc<BackendRouter>>, id: i64) -> Result<(), String> {
+    router
+        .database()
+        .remove_forward_exclusion(id)
+        .map_err(|e| e.to_string())
 }
 
 // (uninstall_mcp follows)

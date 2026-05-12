@@ -3,6 +3,7 @@ mod backends;
 #[cfg(feature = "gui")]
 mod commands;
 mod db;
+mod forwards;
 mod paths;
 mod scanner;
 mod socket;
@@ -144,6 +145,17 @@ pub fn run() {
     let router: Arc<backends::BackendRouter> =
         Arc::new(backends::BackendRouter::new(database.clone()));
 
+    // Phase 3: per-(backend, port) SSH local-forward lifecycle. Shares the
+    // BackendManager so it reuses the same ControlMaster the protocol
+    // tunnel is using. Clone the Arc before handing one copy to Tauri's
+    // managed-state container; we keep the other to fire `shutdown()` from
+    // the RunEvent::Exit handler.
+    let forward_manager: Arc<forwards::ForwardManager> = Arc::new(forwards::ForwardManager::new(
+        database.clone(),
+        router.manager().clone(),
+    ));
+    let forwards_for_shutdown = forward_manager.clone();
+
     let mut app = tauri::Builder::default()
         // Single-instance must be registered first: if another Portsage process is
         // already running, this callback fires in the existing process and the new
@@ -167,6 +179,7 @@ pub fn run() {
         ))
         .manage(database)
         .manage(router)
+        .manage(forward_manager)
         .invoke_handler(tauri::generate_handler![
             commands::list_projects,
             commands::create_project,
@@ -201,6 +214,13 @@ pub fn run() {
             commands::set_current_backend,
             commands::get_tunnel_statuses,
             commands::close_tunnel,
+            commands::list_forward_statuses,
+            commands::enable_forward,
+            commands::disable_forward,
+            commands::sync_forwards,
+            commands::list_forward_exclusions,
+            commands::add_forward_exclusion,
+            commands::remove_forward_exclusion,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -255,8 +275,13 @@ pub fn run() {
     #[cfg(target_os = "macos")]
     app.set_activation_policy(ActivationPolicy::Accessory);
 
-    app.run(|app_handle: &tauri::AppHandle, event: RunEvent| {
+    app.run(move |app_handle: &tauri::AppHandle, event: RunEvent| {
         match &event {
+            RunEvent::ExitRequested { .. } | RunEvent::Exit => {
+                // Close any Portsage-managed ControlMasters (Phase 3).
+                // User-owned masters are left alone by `shutdown()`.
+                forwards_for_shutdown.shutdown();
+            }
             RunEvent::WindowEvent {
                 label,
                 event: WindowEvent::CloseRequested { api, .. },

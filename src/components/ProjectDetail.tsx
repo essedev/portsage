@@ -10,6 +10,7 @@ import { PortRow } from "@/components/PortRow";
 import { AddPortForm } from "@/components/AddPortForm";
 import * as cmd from "@/lib/commands";
 import type { KillEntry } from "@/lib/commands";
+import { useForwards } from "@/features/backends/useForwards";
 import type {
   BackendTarget,
   ProjectStatus,
@@ -44,6 +45,16 @@ export function ProjectDetail({
   backendTarget,
 }: ProjectDetailProps) {
   const isRemote = backendTarget?.kind === "remote";
+  const forwards = useForwards(backendTarget ?? null);
+
+  const handleToggleForward = async (target: PortStatus) => {
+    const current = forwards.byPort[target.port]?.state;
+    if (current === "active" || current === "pending") {
+      await forwards.disable(target.port);
+    } else {
+      await forwards.enable(target.port);
+    }
+  };
   const [showAddPort, setShowAddPort] = useState(false);
   const confirm = useConfirm();
   const { showError, showSuccess } = useToast();
@@ -273,6 +284,7 @@ export function ProjectDetail({
             <UIText variant="label" className="w-14 text-right">Port</UIText>
             <div className="w-6 shrink-0" />
             <div className="w-6 shrink-0" />
+            <div className="w-6 shrink-0" />
           </div>
           {project.ports.map((port) => (
             <PortRow
@@ -280,6 +292,8 @@ export function ProjectDetail({
               port={port}
               onRemove={onRemovePort}
               onKill={handleKillSingle}
+              forward={isRemote ? forwards.byPort[port.port] ?? { state: "cancelled" } : undefined}
+              onToggleForward={isRemote ? handleToggleForward : undefined}
             />
           ))}
         </div>

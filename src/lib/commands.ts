@@ -8,6 +8,8 @@ import type {
   RemoteBackendForm,
   BackendTarget,
   TunnelStatus,
+  ForwardStatus,
+  ForwardExclusion,
 } from "./types";
 
 export function listProjects(): Promise<ProjectStatus[]> {
@@ -164,3 +166,50 @@ export function closeTunnel(name: string): Promise<void> {
  * The payload is a {@link TunnelStatus}.
  */
 export const TUNNEL_EVENT = "tunnel://state-changed" as const;
+
+// --- Forwards (Phase 3) ---
+
+export function listForwardStatuses(backend: string): Promise<ForwardStatus[]> {
+  return invoke("list_forward_statuses", { backend });
+}
+
+export function enableForward(
+  backend: string,
+  port: number,
+): Promise<ForwardStatus> {
+  return invoke("enable_forward", { backend, port });
+}
+
+export function disableForward(
+  backend: string,
+  port: number,
+): Promise<ForwardStatus> {
+  return invoke("disable_forward", { backend, port });
+}
+
+export function syncForwards(backend: string): Promise<ForwardStatus[]> {
+  return invoke("sync_forwards", { backend });
+}
+
+export function listForwardExclusions(
+  backendId: number,
+): Promise<ForwardExclusion[]> {
+  return invoke("list_forward_exclusions", { backendId });
+}
+
+export function addForwardExclusion(
+  backendId: number,
+  port: number,
+): Promise<ForwardExclusion> {
+  return invoke("add_forward_exclusion", { backendId, port });
+}
+
+export function removeForwardExclusion(id: number): Promise<void> {
+  return invoke("remove_forward_exclusion", { id });
+}
+
+/**
+ * Tauri event name emitted whenever one or more forward states change. The
+ * payload is `ForwardStatus[]` (delta snapshot for the affected backend).
+ */
+export const FORWARD_EVENT = "forward://state-changed" as const;

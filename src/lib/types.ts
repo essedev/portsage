@@ -87,3 +87,36 @@ export interface TunnelStatus {
   local_socket: string;
   state: TunnelState;
 }
+
+// --- Forwards (Phase 3) ---
+
+/**
+ * Lifecycle state of a single SSH local-forward.
+ */
+export type ForwardState =
+  | { state: "pending" }
+  | { state: "active" }
+  | { state: "failed"; reason: string }
+  | { state: "cancelled" };
+
+/**
+ * Snapshot of one (backend, port) forward. Emitted by the
+ * `forward://state-changed` Tauri event as a list (delta for the affected
+ * backend).
+ */
+export interface ForwardStatus {
+  backend_name: string;
+  port: number;
+  state: ForwardState;
+}
+
+/**
+ * A port the user has explicitly blocked from auto-forwarding for a given
+ * remote backend.
+ */
+export interface ForwardExclusion {
+  id: number;
+  backend_id: number;
+  port: number;
+  created_at: string;
+}

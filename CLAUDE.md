@@ -8,12 +8,15 @@ A macOS menubar app for managing port allocation across projects. See PROJECT.md
 
 A multi-host evolution is in flight (Linux headless server, remote backends in the UI, SSH auto-forward). The detailed plan is in [docs/multi-host-evolution.md](docs/multi-host-evolution.md). The ROADMAP entry is v0.8.
 
-Phase 1 (Linux headless server) and Phase 2 (remote backend in the UI) are code complete; both still need a real-environment smoke test - the unit tests cover behavioural invariants but no CI currently spawns a real Linux portsage-server or a real SSH connection. Phase 3 (auto SSH forwarding for project ports) and Phase 4 (polish) are not yet started.
+Phase 1 (Linux headless server) shipped and is validated end-to-end against the `forge` dev box (systemd unit running, CLI works against the live socket). Phase 2 (remote backend in the UI) is code complete and validated at the Rust + CLI layer end-to-end through a real SSH unix-socket forward against `forge`; the Tauri UI portion has been built but has not yet been manually exercised in a running app window. Phase 3 (auto SSH port forwarding) is at MVP: per-port toggle + sync + local-conflict probe + ControlMaster ownership + quit cleanup. Phase 3 known gaps: no startup auto-sync, no periodic 60s timer, no server-push StateChanged events (manual sync only), no macOS notifications on conflict, no per-backend excluded-ports UI (the underlying CRUD exists). Phase 4 (polish) is not yet started.
 
 Read the plan before touching any of these modules - they were designed against it:
 - `scanner.rs`: per-OS implementations under `mod macos` / `mod linux`, selected by `#[cfg(target_os)]`. Wire type `ActivePort` lives in `portsage-client/types.rs`.
 - `backends.rs`: `BackendManager` owns SSH tunnels; `BackendRouter` owns the active target; `BackendClient` is the Local/Remote adapter every Tauri command dispatches through.
-- `db.rs`: `remote_backends` table is additive; the row type re-exports `portsage_client::RemoteBackend` so the wire and on-disk shapes can't drift.
+- `forwards.rs`: `ForwardManager` owns per-(backend, port) SSH local-forward state. Two ControlMaster ownership modes: piggyback on the user's `ssh_config` `ControlMaster auto` (preferred; never tear it down), or open a Portsage-managed master at `paths::state_dir()/cm-<alias>.sock` (tracked + closed on app quit). Tests use the `ForwardController` + `LocalPortProbe` traits.
+- `db.rs`: `remote_backends` table is additive; the row type re-exports `portsage_client::RemoteBackend` so the wire and on-disk shapes can't drift. `forward_exclusions` table is per-(backend, port) with UNIQUE and cascade on backend deletion in code.
+
+When changes break SSH on `forge`, check `pgrep -af sshd` first - we permanently disabled Tailscale SSH on the box so the unix-socket forward path works; if a Tailscale ACL push ever re-enables it, every `-L unix:...` silently breaks. Memory: `forge-server.md` carries the decision + reason.
 
 ## Commands
 
@@ -63,6 +66,7 @@ src-tauri/
     scanner.rs        # Port scanner (macOS lsof + ps, Linux /proc + ss fallback)
     socket.rs         # Unix socket server (async), dispatches the wire protocol
     backends.rs       # Multi-host: BackendTarget, BackendManager, SshTunnel, BackendRouter, BackendClient (no Tauri deps)
+    forwards.rs       # Phase 3 multi-host: ForwardManager, ForwardController, local-port collision probe, ControlMaster ownership (no Tauri deps)
   binaries/           # CLI sidecar staged here by scripts/build-cli.sh (gitignored)
   capabilities/
     default.json      # Plugin permissions (dialog, autostart, opener)
