@@ -35,3 +35,6 @@ logo-candidates/
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code session artifacts
+.claude/
