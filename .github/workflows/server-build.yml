@@ -10,6 +10,13 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# `softprops/action-gh-release` needs write access to the repo's releases
+# resource. Without this the action fails with a 403 "Resource not accessible
+# by integration" when the workflow is triggered by a tag push. Default
+# GITHUB_TOKEN scope dropped contents:write in 2023, so we have to ask for it.
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
 
