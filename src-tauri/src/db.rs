@@ -514,26 +514,6 @@ impl Database {
         Ok(())
     }
 
-    pub fn remove_forward_exclusion_by_port(&self, backend_id: i64, port: i64) -> Result<()> {
-        let conn = self.conn();
-        conn.execute(
-            "DELETE FROM forward_exclusions WHERE backend_id = ?1 AND port = ?2",
-            params![backend_id, port],
-        )?;
-        Ok(())
-    }
-
-    /// Cascade for `delete_remote_backend`: drops any excluded-port rows that
-    /// point at the dropped backend. Called by the backend deletion path so
-    /// the table doesn't accumulate orphan rows.
-    pub fn delete_forward_exclusions_for_backend(&self, backend_id: i64) -> Result<()> {
-        let conn = self.conn();
-        conn.execute(
-            "DELETE FROM forward_exclusions WHERE backend_id = ?1",
-            params![backend_id],
-        )?;
-        Ok(())
-    }
 }
 
 fn row_to_forward_exclusion(row: &rusqlite::Row<'_>) -> Result<ForwardExclusion> {
@@ -997,9 +977,6 @@ mod tests {
             .map(|e| e.port)
             .collect();
         assert_eq!(ports, [4070]);
-
-        db.remove_forward_exclusion_by_port(b.id, 4070).unwrap();
-        assert!(db.list_forward_exclusions(b.id).unwrap().is_empty());
     }
 
     #[test]

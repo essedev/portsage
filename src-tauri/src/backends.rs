@@ -81,15 +81,6 @@ pub enum BackendTarget {
     Remote { name: String },
 }
 
-impl BackendTarget {
-    pub fn name(&self) -> &str {
-        match self {
-            BackendTarget::Local => "local",
-            BackendTarget::Remote { name } => name,
-        }
-    }
-}
-
 /// State machine for a single SSH local-forward tunnel.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
@@ -169,12 +160,6 @@ pub enum BackendError {
     Io(#[from] std::io::Error),
 }
 
-impl BackendError {
-    pub fn is_unknown_backend(&self) -> bool {
-        matches!(self, BackendError::UnknownBackend(_))
-    }
-}
-
 /// Strategy for spawning the SSH child. Production uses `SystemSsh`; tests
 /// inject `MockSsh` to exercise the manager without a real SSH server.
 pub trait TunnelLauncher: Send + Sync + std::fmt::Debug {
@@ -221,7 +206,6 @@ impl TunnelLauncher for SystemSsh {
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
-            .map(|c| c)
             .map_err(|e| BackendError::SshSpawn(e.to_string()))
     }
 }
@@ -293,11 +277,10 @@ impl BackendManager {
             .map_err(|e| BackendError::Db(e.to_string()))?
             .ok_or_else(|| BackendError::UnknownBackend(name.to_string()))?;
 
-        let child = self.launcher.spawn(&backend).map_err(|e| {
+        let child = self.launcher.spawn(&backend).inspect_err(|e| {
             tunnel.state = TunnelState::Failed {
                 reason: e.to_string(),
             };
-            e
         })?;
         tunnel.child = Some(child);
         tunnel.local_socket = PathBuf::from(&backend.local_socket_path);
@@ -460,13 +443,6 @@ impl BackendClient {
                 })
             }
             BackendClient::Remote(c) => c.get_config().map_err(|e| e.to_string()),
-        }
-    }
-
-    pub fn find_project_by_path(&self, query: &str) -> Result<Option<ProjectStatus>, String> {
-        match self {
-            BackendClient::Local(db) => actions::find_project_by_path(db, query),
-            BackendClient::Remote(c) => c.find_project_by_path(query).map_err(|e| e.to_string()),
         }
     }
 
@@ -837,7 +813,10 @@ mod tests {
                 name: "ghost".into(),
             })
             .unwrap_err();
-        assert!(err.is_unknown_backend(), "got: {err}");
+        assert!(
+            matches!(err, BackendError::UnknownBackend(_)),
+            "got: {err}",
+        );
     }
 
     #[test]
@@ -978,7 +957,10 @@ mod tests {
                 name: "ghost".into(),
             })
             .unwrap_err();
-        assert!(err.is_unknown_backend(), "got: {err}");
+        assert!(
+            matches!(err, BackendError::UnknownBackend(_)),
+            "got: {err}",
+        );
     }
 
     #[test]

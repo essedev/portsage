@@ -184,7 +184,7 @@ pub fn print_active_ports(mode: OutputMode, ports: &[ActivePort]) -> io::Result<
 
 pub fn print_kill_outcome(mode: OutputMode, port: i64, outcome: KillOutcome) -> io::Result<()> {
     match mode {
-        OutputMode::Json => print_json(&serde_json::json!({"port": port, "outcome": outcome})),
+        OutputMode::Json => print_json(serde_json::json!({"port": port, "outcome": outcome})),
         OutputMode::Quiet => {
             let mut out = anstream::stdout().lock();
             writeln!(out, "{}\t{}", port, outcome_label(outcome))?;
@@ -248,7 +248,7 @@ pub fn print_port(mode: OutputMode, p: &PortStatus) -> io::Result<()> {
 pub fn print_message(mode: OutputMode, message: &str) -> io::Result<()> {
     match mode {
         OutputMode::Quiet => Ok(()),
-        OutputMode::Json => print_json(&serde_json::json!({ "ok": message })),
+        OutputMode::Json => print_json(serde_json::json!({ "ok": message })),
         OutputMode::Human => {
             let mut out = anstream::stdout().lock();
             writeln!(out, "{}", message)?;

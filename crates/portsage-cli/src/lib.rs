@@ -404,7 +404,7 @@ fn cmd_mcp_install(mode: OutputMode, project: bool, skip_uv: bool) -> Result<(),
     let mut out = anstream::stdout().lock();
     match mode {
         OutputMode::Json => {
-            output::print_json(&serde_json::json!({
+            output::print_json(serde_json::json!({
                 "mcp_dir": report.mcp_dir.to_string_lossy(),
                 "claude_config": report.claude_config.to_string_lossy(),
                 "skill_file": report.skill_file.to_string_lossy(),
@@ -447,7 +447,7 @@ fn cmd_mcp_uninstall(mode: OutputMode, wipe: bool) -> Result<(), CliError> {
     let mut out = anstream::stdout().lock();
     match mode {
         OutputMode::Json => {
-            output::print_json(&serde_json::json!({
+            output::print_json(serde_json::json!({
                 "unregistered_global": report.unregistered_global,
                 "unregistered_project": report.unregistered_project,
                 "skill_removed": report.skill_removed,
@@ -541,7 +541,7 @@ fn cmd_self_update(mode: OutputMode, check_only: bool, yes: bool) -> Result<(), 
 
     match mode {
         OutputMode::Json => {
-            output::print_json(&serde_json::json!({
+            output::print_json(serde_json::json!({
                 "current": current,
                 "latest": latest,
                 "status": match cmp {

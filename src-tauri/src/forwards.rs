@@ -222,7 +222,6 @@ fn run_o(
 /// don't keep crossing the layer boundary during a sync.
 #[derive(Debug, Clone)]
 struct BackendBinding {
-    name: String,
     ssh_alias: String,
     control_path: Option<PathBuf>,
 }
@@ -278,14 +277,6 @@ impl ForwardManager {
             Arc::new(SystemSshForwardController),
             Arc::new(SystemLocalProbe),
         )
-    }
-
-    pub fn with_controller(
-        db: Arc<Database>,
-        backends: Arc<BackendManager>,
-        controller: Arc<dyn ForwardController>,
-    ) -> Self {
-        Self::with_dependencies(db, backends, controller, Arc::new(SystemLocalProbe))
     }
 
     pub fn with_dependencies(
@@ -474,38 +465,6 @@ impl ForwardManager {
         Ok(self.single_status(backend_name, port))
     }
 
-    /// Cancel every open forward for `backend_name`. Used on backend
-    /// removal / auto-forward toggle-off.
-    pub fn cancel_all(&self, backend_name: &str) -> Result<(), ForwardError> {
-        let binding = match self.ensure_binding(backend_name) {
-            Ok(b) => b,
-            // If the backend row is already gone, treat the cancel as
-            // already-done; the in-memory forwards just become orphans we
-            // forget below.
-            Err(ForwardError::UnknownBackend(_)) => {
-                self.forget_backend(backend_name);
-                return Ok(());
-            }
-            Err(e) => return Err(e),
-        };
-        let ports: Vec<i64> = {
-            let map = self.forwards.lock().unwrap_or_else(|p| p.into_inner());
-            map.iter()
-                .filter(|((b, _), _)| b == backend_name)
-                .map(|((_, port), _)| *port)
-                .collect()
-        };
-        for port in ports {
-            let _ = self.controller.close_forward(
-                &binding.ssh_alias,
-                port,
-                binding.control_path.as_deref(),
-            );
-            self.set_state(backend_name, port, ForwardState::Cancelled);
-        }
-        Ok(())
-    }
-
     /// Statuses across every known forward, in (backend_name, port) order.
     pub fn statuses(&self) -> Vec<ForwardStatus> {
         let map = self.forwards.lock().unwrap_or_else(|p| p.into_inner());
@@ -569,11 +528,6 @@ impl ForwardManager {
         map.insert(key, ForwardEntry { state, since });
     }
 
-    fn forget_backend(&self, backend_name: &str) {
-        let mut map = self.forwards.lock().unwrap_or_else(|p| p.into_inner());
-        map.retain(|(b, _), _| b != backend_name);
-    }
-
     /// Resolve the ssh alias for `backend_name` and ensure a usable
     /// ControlMaster exists. Returns the (alias, control_path) pair used
     /// by subsequent `-O forward` / `-O cancel` ops.
@@ -586,7 +540,6 @@ impl ForwardManager {
         let alias = row.ssh_alias.clone();
         let control_path = self.ensure_master(&alias)?;
         Ok(BackendBinding {
-            name: backend_name.to_string(),
             ssh_alias: alias,
             control_path,
         })
@@ -710,9 +663,6 @@ mod tests {
         fn open_calls(&self) -> Vec<(String, i64)> {
             self.opens.lock().unwrap().clone()
         }
-        fn close_calls(&self) -> Vec<(String, i64)> {
-            self.closes.lock().unwrap().clone()
-        }
         fn master_open_count(&self) -> usize {
             self.master_opens.load(Ordering::SeqCst)
         }
@@ -822,7 +772,7 @@ mod tests {
     // FakeLauncher trick the backends module already exercises - but the
     // sync path here also calls list_all on the *protocol* socket. To
     // avoid full integration of both fakes for every test, we test the
-    // sync logic indirectly by calling `enable` / `disable` / `cancel_all`,
+    // sync logic indirectly by calling `enable` / `disable`,
     // and write one focused integration-style test in `backends`-adjacent
     // territory for the full sync flow.
 
@@ -915,43 +865,6 @@ mod tests {
         fm.enable("dev", 4000).unwrap();
         let status = fm.disable("dev", 4000).unwrap();
         assert_eq!(status.state, ForwardState::Cancelled);
-    }
-
-    #[test]
-    fn cancel_all_iterates_all_open_forwards() {
-        let db = fresh_db();
-        add_backend(&db, "dev", "/tmp/dev.sock", "/run/portsage/portsage.sock");
-        let ctrl = Arc::new(FakeController::with_existing_master());
-        let fm = fm(db, ctrl.clone(), Arc::new(FakeProbe::empty()));
-
-        fm.enable("dev", 4000).unwrap();
-        fm.enable("dev", 4001).unwrap();
-        fm.enable("dev", 4002).unwrap();
-        fm.cancel_all("dev").unwrap();
-
-        let closed_ports: Vec<i64> = ctrl.close_calls().into_iter().map(|(_, p)| p).collect();
-        let closed_set: HashSet<i64> = closed_ports.into_iter().collect();
-        assert_eq!(closed_set, [4000, 4001, 4002].iter().copied().collect());
-
-        // States should all be Cancelled.
-        let states: Vec<ForwardState> = fm
-            .statuses_for("dev")
-            .into_iter()
-            .map(|s| s.state)
-            .collect();
-        assert!(states.iter().all(|s| matches!(s, ForwardState::Cancelled)));
-    }
-
-    #[test]
-    fn cancel_all_unknown_backend_clears_in_memory_state_and_does_not_err() {
-        let db = fresh_db();
-        add_backend(&db, "dev", "/tmp/dev.sock", "/run/portsage/portsage.sock");
-        let ctrl = Arc::new(FakeController::with_existing_master());
-        let fm = fm(db.clone(), ctrl, Arc::new(FakeProbe::empty()));
-        fm.enable("dev", 4000).unwrap();
-        db.delete_remote_backend(1).unwrap();
-        fm.cancel_all("dev").unwrap();
-        assert!(fm.statuses_for("dev").is_empty());
     }
 
     #[test]

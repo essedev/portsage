@@ -59,8 +59,10 @@ pub enum ClientError {
 
 /// Whether the client should launch the backend if the socket is missing.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum AutoSpawn {
     /// Do not attempt to spawn. Connection failures surface as `AppNotRunning`.
+    #[default]
     Disabled,
     /// Attempt to spawn the backend in `--headless` mode. The binary is located
     /// via (in order): the supplied `app_path`, the `$PORTSAGE_APP` env var,
@@ -69,11 +71,6 @@ pub enum AutoSpawn {
     Enabled { app_path: Option<PathBuf> },
 }
 
-impl Default for AutoSpawn {
-    fn default() -> Self {
-        AutoSpawn::Disabled
-    }
-}
 
 /// Synchronous client for the Portsage Unix socket. Every method opens a
 /// fresh connection; the backend's 60 s idle timeout makes long-lived
