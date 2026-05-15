@@ -35,15 +35,16 @@ When changes break SSH on `forge`, check `pgrep -af sshd` first - we permanently
 ```
 src/
   components/
-    ui/               # Primitives (UICard, UIButton, UISelect, UIPortLink, etc.)
+    ui/                    # Primitives (UICard, UIButton, UISelect, UIPortLink, etc.)
     PortRow.tsx
-    ProjectCard.tsx
     ProjectDetail.tsx
-    ProjectList.tsx
     PopoverPanel.tsx
     Sidebar.tsx
+    BackendSwitcher.tsx    # Sidebar dropdown for Local / Remote backends, live tunnel state dot
     AppHeader.tsx
+    WelcomePanel.tsx       # Empty-state main window (first-run CTA + stat cards when projects exist)
     SettingsPanel.tsx
+    RemoteBackendsPanel.tsx # Settings tab: remote backend CRUD, auto-forward toggle, excluded ports
     UnmanagedPortsPanel.tsx
     AddProjectForm.tsx
     AddPortForm.tsx
@@ -74,6 +75,8 @@ src-tauri/
 crates/
   portsage-client/    # sync UnixStream client + wire types (single source of truth)
   portsage-cli/       # clap-based binary, talks to the socket via portsage-client
+  portsage-mcp/       # shared MCP-install logic (parse-or-bail JSON edit + atomic-tmp-then-rename),
+                      # consumed by both `portsage mcp install` (CLI) and the Tauri Settings panel
 mcp/
   server.py           # Python MCP server (thin client via stdio)
   SKILL.md            # Claude Code skill file

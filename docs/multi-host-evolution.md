@@ -4,6 +4,8 @@ Detailed plan to evolve Portsage from a single-host macOS app into a multi-host 
 
 This document is the source of truth for the evolution roadmap. It supersedes the vague entries in `ROADMAP.md` (v0.7 "cross-platform") and refines them into shippable phases.
 
+> **Status (2026-05-15)**: Phase 1, Phase 2, and Phase 3 are shipped and validated end-to-end against the `forge` dev box on 2026-05-12. Phase 4 (polish) is not yet started. This document is kept for the design rationale and the residual Phase 4 plan; the shipped scope and known deferrals are mirrored in [`ROADMAP.md`](ROADMAP.md) (v0.8 / v0.11) and the "Active evolution" section of [`CLAUDE.md`](../CLAUDE.md).
+
 ## Context
 
 Portsage today assumes a single host: the user's Mac. With AI agents (Claude Code) running on a remote dev server (Hetzner dedicated, Linux), the assumption breaks in three places:

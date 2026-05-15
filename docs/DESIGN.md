@@ -88,7 +88,6 @@ Base 4px. Use only these values for padding, margin, gap.
 | Port status dot | 8px diameter |
 | UI icons | 16px (small), 20px (default) |
 | PortRow row height | 32px |
-| ProjectCard header row height | 40px |
 
 ## Effects
 
@@ -146,20 +145,21 @@ Components that combine primitives with domain logic.
 | Component | Description |
 |------------|-------------|
 | `PortRow` | Single port row: service name + port (mono) + UIStatus |
-| `ProjectCard` | Project card: name (section font) + range (mono) + active-ports badge + PortRow list |
-| `ProjectList` | Scrollable list of ProjectCards with UISearch on top |
 | `ProjectDetail` | Detail panel: project info + service list + actions |
-| `PopoverPanel` | Full popover layout: header + compact ProjectList + footer |
-| `Sidebar` | Full window sidebar: compact project list + search + add button |
+| `PopoverPanel` | Full popover layout: header + compact project list + footer |
+| `Sidebar` | Full window sidebar: backend switcher + compact project list + search + add button |
+| `BackendSwitcher` | Sidebar dropdown: Local / Remote backends with a live tunnel state dot |
 | `AppHeader` | Header with the "portsage" title (title font + glow) + tagline + active-ports badge |
+| `WelcomePanel` | Empty-state main window: first-run CTA + stat cards once projects exist |
 | `SettingsPanel` | Settings panel: autostart, port config, Claude Code integration, export/import |
+| `RemoteBackendsPanel` | Settings tab: remote backend CRUD, auto-forward toggle, excluded ports |
 | `UnmanagedPortsPanel` | Table of active ports not associated with projects (port, process, PID) |
 | `AddProjectForm` | Add-project form: name, path, confirm |
 | `AddPortForm` | Add-service form + dropdown of free ports in the range |
 
 ### Component conventions
 
-- Each component lives in a single file: `src/components/ui/UICard.tsx`, `src/components/ProjectCard.tsx`
+- Each component lives in a single file: `src/components/ui/UICard.tsx`, `src/components/ProjectDetail.tsx`
 - Props typed with a dedicated interface in the same file
 - Styling with Tailwind classes, custom CSS tokens for design system colors
 - No component may use hardcoded colors - always via tokens
