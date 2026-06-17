@@ -139,6 +139,28 @@ pub fn remove_port_by_service(
     db.remove_port(port.id).map_err(|e| e.to_string())
 }
 
+/// Rename a project and/or change its path, keeping its range and registered
+/// ports. Returns the updated project enriched with live port status so the
+/// caller sees the preserved ports (mirrors what `list_all` would report).
+pub fn update_project(
+    db: &Database,
+    current_name: &str,
+    new_name: Option<&str>,
+    new_path: Option<&str>,
+) -> Result<ProjectStatus, String> {
+    let updated = db
+        .update_project(current_name, new_name, new_path)
+        .map_err(|e| e.to_string())?;
+    // Re-enrich so the response carries the project's surviving ports + their
+    // live state, addressed by the stable id (the name may have just changed).
+    let projects = db.list_projects().map_err(|e| e.to_string())?;
+    let active = scanner::scan_active_ports_detailed();
+    enrich_with_status(projects, &active)
+        .into_iter()
+        .find(|p| p.id == updated.id)
+        .ok_or_else(|| "project not found after update".to_string())
+}
+
 /// Find the project whose `path` equals `query_path` or is an ancestor of it.
 /// Returns the project with the longest matching prefix (most specific) so
 /// that nested projects resolve correctly.
@@ -572,6 +594,29 @@ mod tests {
         db.create_project("alpha", None).unwrap();
         let err = remove_port_by_service(&db, "alpha", "ghost").unwrap_err();
         assert!(err.contains("service"), "got: {err}");
+    }
+
+    // --- update_project ---
+
+    #[test]
+    fn update_project_returns_enriched_status_with_ports() {
+        let db = Database::in_memory().unwrap();
+        let p = db.create_project("omnia", Some("/old")).unwrap();
+        db.add_port(p.id, "vite", p.range_start).unwrap();
+        let updated =
+            update_project(&db, "omnia", Some("omnia-ddt"), Some("/new")).unwrap();
+        assert_eq!(updated.id, p.id);
+        assert_eq!(updated.name, "omnia-ddt");
+        assert_eq!(updated.path.as_deref(), Some("/new"));
+        assert_eq!(updated.ports.len(), 1, "ports survive the rename");
+        assert_eq!(updated.ports[0].service, "vite");
+    }
+
+    #[test]
+    fn update_project_unknown_surfaces_error_string() {
+        let db = Database::in_memory().unwrap();
+        let err = update_project(&db, "ghost", Some("x"), None).unwrap_err();
+        assert!(err.contains("not found"), "got: {err}");
     }
 
     // --- list_unmanaged / list_with_status / config ---

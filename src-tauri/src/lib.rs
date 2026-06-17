@@ -196,6 +196,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::list_projects,
             commands::create_project,
+            commands::update_project,
             commands::delete_project,
             commands::add_port,
             commands::remove_port,

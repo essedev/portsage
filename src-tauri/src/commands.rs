@@ -40,6 +40,17 @@ pub fn delete_project(router: State<Arc<BackendRouter>>, name: String) -> Result
 }
 
 #[tauri::command]
+pub fn update_project(
+    router: State<Arc<BackendRouter>>,
+    current_name: String,
+    new_name: Option<String>,
+    new_path: Option<String>,
+) -> Result<ProjectStatus, String> {
+    let client = router.client().map_err(|e| e.to_string())?;
+    client.update_project(&current_name, new_name.as_deref(), new_path.as_deref())
+}
+
+#[tauri::command]
 pub fn add_port(
     router: State<Arc<BackendRouter>>,
     project_name: String,
@@ -585,6 +596,7 @@ mod tests {
         for expected in [
             "list_all",
             "reserve_range",
+            "update_project",
             "register_port",
             "release_project",
             "remove_port",

@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection, OptionalExtension, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
@@ -248,6 +248,106 @@ impl Database {
             params![name, path, range_start, range_end],
         )?;
         let id = conn.last_insert_rowid();
+        conn.query_row(
+            "SELECT id, name, path, range_start, range_end, created_at \
+             FROM projects WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(Project {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    path: row.get(2)?,
+                    range_start: row.get(3)?,
+                    range_end: row.get(4)?,
+                    created_at: row.get(5)?,
+                })
+            },
+        )
+    }
+
+    /// Rename a project and/or change its filesystem path, leaving its
+    /// reserved range and every registered port untouched. `new_name` and
+    /// `new_path` are independently optional: `None` leaves that field as-is,
+    /// and at least one must be `Some`. An empty/whitespace `new_path` clears
+    /// the path to NULL; an empty `new_name` is rejected.
+    ///
+    /// Errors when the project does not exist or when `new_name` collides with
+    /// another project. Returns the updated row so callers can echo it back.
+    pub fn update_project(
+        &self,
+        current_name: &str,
+        new_name: Option<&str>,
+        new_path: Option<&str>,
+    ) -> Result<Project> {
+        fn constraint(msg: String) -> rusqlite::Error {
+            rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CONSTRAINT),
+                Some(msg),
+            )
+        }
+        fn not_found(msg: String) -> rusqlite::Error {
+            rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_NOTFOUND),
+                Some(msg),
+            )
+        }
+
+        if new_name.is_none() && new_path.is_none() {
+            return Err(constraint(
+                "at least one of new_name or new_path must be provided".into(),
+            ));
+        }
+        if let Some(n) = new_name {
+            if n.trim().is_empty() {
+                return Err(constraint("new name cannot be empty".into()));
+            }
+        }
+
+        let conn = self.conn();
+
+        // Resolve the project by its current name.
+        let existing: Option<(i64, String, Option<String>)> = conn
+            .query_row(
+                "SELECT id, name, path FROM projects WHERE name = ?1",
+                params![current_name],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        let (id, old_name, old_path) =
+            existing.ok_or_else(|| not_found(format!("project '{current_name}' not found")))?;
+
+        // Guard renames against collisions, but allow a no-op rename to the
+        // same name so a caller that always sends new_name doesn't trip on it.
+        let final_name = match new_name {
+            Some(n) if n != old_name => {
+                let taken: Option<i64> = conn
+                    .query_row(
+                        "SELECT id FROM projects WHERE name = ?1",
+                        params![n],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                if taken.is_some() {
+                    return Err(constraint(format!("project name '{n}' is already in use")));
+                }
+                n.to_string()
+            }
+            Some(n) => n.to_string(),
+            None => old_name,
+        };
+
+        // None keeps the old path; an empty string clears it to NULL.
+        let final_path: Option<String> = match new_path {
+            None => old_path,
+            Some(p) if p.trim().is_empty() => None,
+            Some(p) => Some(p.to_string()),
+        };
+
+        conn.execute(
+            "UPDATE projects SET name = ?1, path = ?2 WHERE id = ?3",
+            params![final_name, final_path, id],
+        )?;
+
         conn.query_row(
             "SELECT id, name, path, range_start, range_end, created_at \
              FROM projects WHERE id = ?1",
@@ -713,6 +813,103 @@ mod tests {
         let projects = db.list_projects().unwrap();
         assert_eq!(projects[0].ports.len(), 1);
         assert_eq!(projects[0].ports[0].service, "api");
+    }
+
+    #[test]
+    fn update_project_renames_and_preserves_range_and_ports() {
+        let db = fresh_db();
+        let p = db.create_project("omnia", Some("/old/path")).unwrap();
+        db.add_port(p.id, "vite", p.range_start).unwrap();
+        db.add_port(p.id, "api", p.range_start + 1).unwrap();
+
+        let updated = db
+            .update_project("omnia", Some("omnia-ddt"), Some("/new/path"))
+            .unwrap();
+        assert_eq!(updated.id, p.id, "id is stable across a rename");
+        assert_eq!(updated.name, "omnia-ddt");
+        assert_eq!(updated.path.as_deref(), Some("/new/path"));
+        assert_eq!(updated.range_start, p.range_start);
+        assert_eq!(updated.range_end, p.range_end);
+        assert_eq!(updated.created_at, p.created_at);
+
+        // Ports survive the rename, still attached to the same project id.
+        let listed = db.list_projects().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].project.name, "omnia-ddt");
+        assert_eq!(listed[0].ports.len(), 2);
+    }
+
+    #[test]
+    fn update_project_can_change_only_the_name() {
+        let db = fresh_db();
+        db.create_project("alpha", Some("/keep/me")).unwrap();
+        let updated = db.update_project("alpha", Some("beta"), None).unwrap();
+        assert_eq!(updated.name, "beta");
+        assert_eq!(updated.path.as_deref(), Some("/keep/me"), "path untouched");
+    }
+
+    #[test]
+    fn update_project_can_change_only_the_path() {
+        let db = fresh_db();
+        db.create_project("alpha", Some("/old")).unwrap();
+        let updated = db.update_project("alpha", None, Some("/new")).unwrap();
+        assert_eq!(updated.name, "alpha", "name untouched");
+        assert_eq!(updated.path.as_deref(), Some("/new"));
+    }
+
+    #[test]
+    fn update_project_empty_path_clears_to_null() {
+        let db = fresh_db();
+        db.create_project("alpha", Some("/old")).unwrap();
+        let updated = db.update_project("alpha", None, Some("   ")).unwrap();
+        assert!(updated.path.is_none(), "blank path clears to NULL");
+    }
+
+    #[test]
+    fn update_project_requires_at_least_one_field() {
+        let db = fresh_db();
+        db.create_project("alpha", None).unwrap();
+        let err = db.update_project("alpha", None, None).unwrap_err();
+        assert!(err.to_string().contains("at least one"), "got: {err}");
+    }
+
+    #[test]
+    fn update_project_rejects_empty_new_name() {
+        let db = fresh_db();
+        db.create_project("alpha", None).unwrap();
+        let err = db.update_project("alpha", Some("  "), None).unwrap_err();
+        assert!(err.to_string().contains("empty"), "got: {err}");
+    }
+
+    #[test]
+    fn update_project_unknown_project_errors() {
+        let db = fresh_db();
+        let err = db
+            .update_project("ghost", Some("x"), None)
+            .unwrap_err();
+        assert!(err.to_string().contains("not found"), "got: {err}");
+    }
+
+    #[test]
+    fn update_project_rejects_name_collision() {
+        let db = fresh_db();
+        db.create_project("alpha", None).unwrap();
+        db.create_project("beta", None).unwrap();
+        let err = db.update_project("alpha", Some("beta"), None).unwrap_err();
+        assert!(err.to_string().contains("already in use"), "got: {err}");
+    }
+
+    #[test]
+    fn update_project_noop_rename_to_same_name_is_allowed() {
+        // The UI always submits the current name; renaming to the same value
+        // must not trip the collision check against the project's own row.
+        let db = fresh_db();
+        db.create_project("alpha", Some("/old")).unwrap();
+        let updated = db
+            .update_project("alpha", Some("alpha"), Some("/new"))
+            .unwrap();
+        assert_eq!(updated.name, "alpha");
+        assert_eq!(updated.path.as_deref(), Some("/new"));
     }
 
     /// Regression test for the create_project race condition.

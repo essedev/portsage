@@ -266,6 +266,25 @@ impl Client {
         }))
     }
 
+    /// Rename a project and/or change its path, preserving its range and
+    /// registered ports. Only the fields passed as `Some` are sent; the
+    /// backend leaves absent fields unchanged and rejects the all-absent call.
+    pub fn update_project(
+        &self,
+        current_name: &str,
+        new_name: Option<&str>,
+        new_path: Option<&str>,
+    ) -> Result<ProjectStatus, ClientError> {
+        let mut params = json!({ "current_name": current_name });
+        if let Some(n) = new_name {
+            params["new_name"] = json!(n);
+        }
+        if let Some(p) = new_path {
+            params["new_path"] = json!(p);
+        }
+        self.call(json!({ "method": "update_project", "params": params }))
+    }
+
     /// Look up a remote-backend row by name on the (Mac) socket. Used by the
     /// CLI's `--backend <name>` flag to discover the local-side forwarded
     /// socket path without poking the Mac's SQLite file directly.
@@ -481,6 +500,23 @@ mod tests {
         let client = Client::new(path);
         let res = client.find_project_by_path("/var/log").unwrap();
         assert!(res.is_none());
+    }
+
+    #[test]
+    fn update_project_sends_only_provided_fields() {
+        let (path, _dir) = spawn_mock_server(|req| {
+            assert!(req.contains("\"method\":\"update_project\""));
+            assert!(req.contains("\"current_name\":\"omnia\""));
+            assert!(req.contains("\"new_name\":\"omnia-ddt\""));
+            // new_path was None, so the key must be absent from the payload.
+            assert!(!req.contains("new_path"), "request was: {req}");
+            r#"{"result":{"id":1,"name":"omnia-ddt","path":"/old","range_start":4000,"range_end":4009,"created_at":"t","ports":[]}}"#.into()
+        });
+        let client = Client::new(path);
+        let ps = client
+            .update_project("omnia", Some("omnia-ddt"), None)
+            .unwrap();
+        assert_eq!(ps.name, "omnia-ddt");
     }
 
     #[test]

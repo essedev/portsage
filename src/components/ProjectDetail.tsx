@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Trash2, FolderOpen, Terminal, Plus, Power } from "lucide-react";
+import { Trash2, FolderOpen, Terminal, Plus, Power, Pencil } from "lucide-react";
 import { useConfirm } from "@/lib/dialog";
 import { useToast } from "@/lib/toast";
 import { UIText } from "@/components/ui/UIText";
@@ -8,6 +8,7 @@ import { UIDivider } from "@/components/ui/UIDivider";
 import { UIBadge } from "@/components/ui/UIBadge";
 import { PortRow } from "@/components/PortRow";
 import { AddPortForm } from "@/components/AddPortForm";
+import { EditProjectForm } from "@/components/EditProjectForm";
 import * as cmd from "@/lib/commands";
 import type { KillEntry } from "@/lib/commands";
 import { useForwards } from "@/features/backends/useForwards";
@@ -21,6 +22,16 @@ import type {
 interface ProjectDetailProps {
   project: ProjectStatus;
   onDelete: (name: string) => void;
+  /**
+   * Rename a project and/or change its path. Returns true when the backend
+   * accepted the change (range + ports are preserved server-side). Only the
+   * provided fields change; an empty `newPath` clears the stored path.
+   */
+  onUpdate: (
+    currentName: string,
+    newName?: string,
+    newPath?: string,
+  ) => Promise<boolean>;
   onAddPort: (projectName: string, service: string, port: number) => void;
   onRemovePort: (projectName: string, service: string) => void;
   onKillPort: (port: number) => Promise<KillOutcome | null>;
@@ -38,6 +49,7 @@ interface ProjectDetailProps {
 export function ProjectDetail({
   project,
   onDelete,
+  onUpdate,
   onAddPort,
   onRemovePort,
   onKillPort,
@@ -56,8 +68,17 @@ export function ProjectDetail({
     }
   };
   const [showAddPort, setShowAddPort] = useState(false);
+  const [editing, setEditing] = useState(false);
   const confirm = useConfirm();
   const { showError, showSuccess } = useToast();
+
+  const handleUpdate = async (newName?: string, newPath?: string) => {
+    const ok = await onUpdate(project.name, newName, newPath);
+    if (ok) {
+      setEditing(false);
+      showSuccess("Project updated");
+    }
+  };
   const activePorts = project.ports.filter((p) => p.active).length;
 
   const handleDelete = async () => {
@@ -174,6 +195,14 @@ export function ProjectDetail({
 
   return (
     <div className="flex flex-col gap-[var(--spacing-4)] p-[var(--spacing-5)]">
+      {editing ? (
+        <EditProjectForm
+          initialName={project.name}
+          initialPath={project.path}
+          onSubmit={handleUpdate}
+          onCancel={() => setEditing(false)}
+        />
+      ) : (
       <div className="flex items-start justify-between">
         <div className="flex flex-col gap-[var(--spacing-1)]">
           <UIText variant="title" as="h2">
@@ -185,38 +214,47 @@ export function ProjectDetail({
             </UIText>
           )}
         </div>
-        {/* Toolbar split into two groups so navigation actions (open path)
-            don't sit next to destructive actions (stop processes, delete project).
-            A subtle vertical divider reinforces the separation. */}
+        {/* Toolbar split into two groups so navigation actions (edit, open
+            path) don't sit next to destructive actions (stop processes, delete
+            project). A subtle vertical divider reinforces the separation. */}
         <div className="flex items-center gap-[var(--spacing-3)]">
-          {project.path && !isRemote && (
-            <div className="flex items-center gap-[var(--spacing-1)]">
-              <UIButton
-                variant="ghost"
-                size="icon"
-                title="Open in Finder"
-                aria-label="Open project folder in Finder"
-                onClick={() => cmd.openInFinder(project.path!)}
-              >
-                <FolderOpen size={16} aria-hidden="true" />
-              </UIButton>
-              <UIButton
-                variant="ghost"
-                size="icon"
-                title="Open in Terminal"
-                aria-label="Open project folder in Terminal"
-                onClick={() => cmd.openInTerminal(project.path!)}
-              >
-                <Terminal size={16} aria-hidden="true" />
-              </UIButton>
-            </div>
-          )}
-          {project.path && !isRemote && (
-            <div
-              aria-hidden="true"
-              className="h-5 w-px bg-border-subtle"
-            />
-          )}
+          <div className="flex items-center gap-[var(--spacing-1)]">
+            <UIButton
+              variant="ghost"
+              size="icon"
+              title="Rename or change path"
+              aria-label="Edit project name or path"
+              onClick={() => setEditing(true)}
+            >
+              <Pencil size={16} aria-hidden="true" />
+            </UIButton>
+            {project.path && !isRemote && (
+              <>
+                <UIButton
+                  variant="ghost"
+                  size="icon"
+                  title="Open in Finder"
+                  aria-label="Open project folder in Finder"
+                  onClick={() => cmd.openInFinder(project.path!)}
+                >
+                  <FolderOpen size={16} aria-hidden="true" />
+                </UIButton>
+                <UIButton
+                  variant="ghost"
+                  size="icon"
+                  title="Open in Terminal"
+                  aria-label="Open project folder in Terminal"
+                  onClick={() => cmd.openInTerminal(project.path!)}
+                >
+                  <Terminal size={16} aria-hidden="true" />
+                </UIButton>
+              </>
+            )}
+          </div>
+          <div
+            aria-hidden="true"
+            className="h-5 w-px bg-border-subtle"
+          />
           <div className="flex items-center gap-[var(--spacing-1)]">
             <UIButton
               variant="warning"
@@ -248,6 +286,7 @@ export function ProjectDetail({
           </div>
         </div>
       </div>
+      )}
 
       <div className="flex items-center gap-[var(--spacing-3)]">
         <UIText variant="mono">

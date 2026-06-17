@@ -31,6 +31,9 @@ its UI: read state, mutate state, and act on live ports (kill / open).
 
 - **reserve_range(project_name, path?)** - reserves the next free range. Pass
   `path` so future `find_project_by_path` calls resolve correctly.
+- **update_project(current_name, new_name?, new_path?)** - renames a project
+  and/or changes its path, keeping its range and registered ports. Provide at
+  least one of `new_name`/`new_path`; pass an empty `new_path` to clear it.
 - **register_port(project_name, service, port)** - adds a port to a project's
   range. Returns the row including its id.
 - **remove_port(project_name, service)** - removes a single port.

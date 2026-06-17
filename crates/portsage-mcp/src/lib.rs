@@ -25,6 +25,7 @@ use std::path::{Path, PathBuf};
 pub const MCP_TOOL_PERMISSIONS: &[&str] = &[
     "mcp__portsage__list_all",
     "mcp__portsage__reserve_range",
+    "mcp__portsage__update_project",
     "mcp__portsage__register_port",
     "mcp__portsage__release_project",
     "mcp__portsage__remove_port",

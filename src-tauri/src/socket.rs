@@ -333,6 +333,21 @@ pub(crate) async fn handle_request(db: &Database, line: &str) -> Value {
             }
         }
 
+        "update_project" => {
+            let current = match params["current_name"].as_str() {
+                Some(n) => n,
+                None => return json!({"error": "missing params.current_name"}),
+            };
+            // Absent keys mean "leave unchanged"; the actions/db layer rejects
+            // the all-absent case so we don't have to duplicate that check here.
+            let new_name = params["new_name"].as_str();
+            let new_path = params["new_path"].as_str();
+            match actions::update_project(db, current, new_name, new_path) {
+                Ok(ps) => json!({ "result": ps }),
+                Err(e) => json!({ "error": e }),
+            }
+        }
+
         "get_remote_backend" => {
             let name = match params["name"].as_str() {
                 Some(n) => n,
@@ -788,6 +803,72 @@ mod tests {
         assert!(res["error"].as_str().unwrap().contains("missing"));
     }
 
+    // --- update_project ---
+
+    #[tokio::test]
+    async fn update_project_renames_and_keeps_ports() {
+        let db = fresh_db();
+        req(
+            &db,
+            r#"{"method":"reserve_range","params":{"name":"omnia","path":"/old"}}"#,
+        )
+        .await;
+        req(
+            &db,
+            r#"{"method":"register_port","params":{"project":"omnia","service":"vite","port":4000}}"#,
+        )
+        .await;
+        let res = req(
+            &db,
+            r#"{"method":"update_project","params":{"current_name":"omnia","new_name":"omnia-ddt","new_path":"/new"}}"#,
+        )
+        .await;
+        assert_eq!(res["result"]["name"], "omnia-ddt");
+        assert_eq!(res["result"]["path"], "/new");
+        assert_eq!(res["result"]["range_start"], 4000);
+        assert_eq!(res["result"]["ports"].as_array().unwrap().len(), 1);
+        // The old name is gone, the new one resolves.
+        let list = req(&db, r#"{"method":"list_all"}"#).await;
+        assert_eq!(list["result"][0]["name"], "omnia-ddt");
+    }
+
+    #[tokio::test]
+    async fn update_project_missing_current_name() {
+        let db = fresh_db();
+        let res = req(&db, r#"{"method":"update_project","params":{}}"#).await;
+        assert!(res["error"]
+            .as_str()
+            .unwrap()
+            .contains("missing params.current_name"));
+    }
+
+    #[tokio::test]
+    async fn update_project_requires_a_field() {
+        let db = fresh_db();
+        req(
+            &db,
+            r#"{"method":"reserve_range","params":{"name":"alpha"}}"#,
+        )
+        .await;
+        let res = req(
+            &db,
+            r#"{"method":"update_project","params":{"current_name":"alpha"}}"#,
+        )
+        .await;
+        assert!(res["error"].as_str().unwrap().contains("at least one"));
+    }
+
+    #[tokio::test]
+    async fn update_project_unknown_project_errors() {
+        let db = fresh_db();
+        let res = req(
+            &db,
+            r#"{"method":"update_project","params":{"current_name":"ghost","new_name":"x"}}"#,
+        )
+        .await;
+        assert!(res["error"].as_str().unwrap().contains("not found"));
+    }
+
     // --- get_remote_backend ---
 
     // Uses `Database::create_remote_backend`, which lives in the GUI-gated
@@ -931,9 +1012,17 @@ mod tests {
             );
             assert_eq!(found.unwrap().name, "alpha");
 
-            // 7. release_project
+            // 7. update_project -> ProjectStatus (rename, keep the port)
+            let renamed = client
+                .update_project("alpha", Some("alpha2"), None)
+                .map_err(|e| format!("update_project: {e}"))?;
+            assert_eq!(renamed.name, "alpha2");
+            assert_eq!(renamed.range_start, 4000);
+            assert_eq!(renamed.ports.len(), 1, "port survives the rename");
+
+            // 8. release_project (by the new name)
             client
-                .release_project("alpha")
+                .release_project("alpha2")
                 .map_err(|e| format!("release_project: {e}"))?;
             let after = client.list_all().map_err(|e| format!("list_all: {e}"))?;
             assert!(after.is_empty());

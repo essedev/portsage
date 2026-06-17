@@ -114,6 +114,18 @@ pub enum Command {
         here: bool,
     },
 
+    /// Rename a project and/or change its path. The range and every registered
+    /// port are preserved. Provide a new name, `--path`, or both.
+    Rename {
+        /// Current project name.
+        current: String,
+        /// New project name. Omit to change only the path.
+        new_name: Option<String>,
+        /// New filesystem path for the project. Pass an empty string to clear it.
+        #[arg(long)]
+        path: Option<String>,
+    },
+
     /// Scan the machine for active TCP ports.
     Scan {
         /// Show only active ports that are not registered to any project and

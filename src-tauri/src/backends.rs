@@ -468,6 +468,22 @@ impl BackendClient {
         }
     }
 
+    pub fn update_project(
+        &self,
+        current_name: &str,
+        new_name: Option<&str>,
+        new_path: Option<&str>,
+    ) -> Result<ProjectStatus, String> {
+        match self {
+            BackendClient::Local(db) => {
+                actions::update_project(db, current_name, new_name, new_path)
+            }
+            BackendClient::Remote(c) => c
+                .update_project(current_name, new_name, new_path)
+                .map_err(|e| e.to_string()),
+        }
+    }
+
     pub fn register_port(
         &self,
         project: &str,
@@ -1022,6 +1038,24 @@ mod tests {
         client.reserve_range("alpha", None).unwrap();
         client.release_project("alpha").unwrap();
         assert!(client.list_all().unwrap().is_empty());
+    }
+
+    #[test]
+    fn backend_client_local_update_project_renames_and_keeps_ports() {
+        let db = fresh_db();
+        let router = BackendRouter::new(db);
+        let client = router.client_for(&BackendTarget::Local).unwrap();
+        client.reserve_range("omnia", Some("/old")).unwrap();
+        client.register_port("omnia", "vite", 4000).unwrap();
+        let updated = client
+            .update_project("omnia", Some("omnia-ddt"), Some("/new"))
+            .unwrap();
+        assert_eq!(updated.name, "omnia-ddt");
+        assert_eq!(updated.path.as_deref(), Some("/new"));
+        assert_eq!(updated.ports.len(), 1);
+        let projects = client.list_all().unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "omnia-ddt");
     }
 
     #[test]

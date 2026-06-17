@@ -114,6 +114,34 @@ def reserve_range(project_name: str, path: str | None = None) -> str:
 
 
 @mcp.tool()
+def update_project(
+    current_name: str,
+    new_name: str | None = None,
+    new_path: str | None = None,
+) -> str:
+    """Rename a project and/or change its filesystem path, keeping its reserved
+    port range and every registered port intact.
+
+    At least one of new_name or new_path must be provided. Errors if the project
+    does not exist or if new_name is already taken by another project.
+
+    Returns the updated project (with its preserved ports).
+
+    Args:
+        current_name: Current name of the project to update
+        new_name: New name for the project (must be unique). Omit to keep it.
+        new_path: New filesystem path. Omit to keep it; pass an empty string to
+                  clear it.
+    """
+    params: dict = {"current_name": current_name}
+    if new_name is not None:
+        params["new_name"] = new_name
+    if new_path is not None:
+        params["new_path"] = new_path
+    return json.dumps(_send("update_project", params), indent=2)
+
+
+@mcp.tool()
 def register_port(project_name: str, service: str, port: int) -> str:
     """Register a specific port for a service within a project's range.
 

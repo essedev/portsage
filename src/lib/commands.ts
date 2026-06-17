@@ -27,6 +27,19 @@ export function deleteProject(name: string): Promise<void> {
   return invoke("delete_project", { name });
 }
 
+/**
+ * Rename a project and/or change its path, keeping its range and registered
+ * ports. Only the provided fields change; `newPath` set to an empty string
+ * clears the path. At least one of `newName`/`newPath` must be passed.
+ */
+export function updateProject(
+  currentName: string,
+  newName?: string,
+  newPath?: string,
+): Promise<ProjectStatus> {
+  return invoke("update_project", { currentName, newName, newPath });
+}
+
 export function addPort(
   projectName: string,
   service: string,

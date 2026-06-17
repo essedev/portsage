@@ -55,10 +55,10 @@ pnpm test     # TypeScript frontend (vitest)
 
 ## MCP integration
 
-The MCP server exposes 14 tools across three groups:
+The MCP server exposes 15 tools across three groups:
 
 - **Read**: `list_all`, `scan_active`, `list_unmanaged`, `next_range`, `get_config`, `find_project_by_path`.
-- **Mutate**: `reserve_range`, `register_port`, `remove_port`, `release_project`, `set_config`.
+- **Mutate**: `reserve_range`, `update_project`, `register_port`, `remove_port`, `release_project`, `set_config`.
 - **Act**: `kill_port`, `kill_project`, `open_in_browser`.
 
 **Claude Code**: install from terminal (canonical):

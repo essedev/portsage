@@ -53,6 +53,9 @@ export function useProjects() {
 
   const remove = (name: string) => run(() => cmd.deleteProject(name));
 
+  const update = (currentName: string, newName?: string, newPath?: string) =>
+    run(() => cmd.updateProject(currentName, newName, newPath));
+
   const addPort = (projectName: string, service: string, port: number) =>
     run(() => cmd.addPort(projectName, service, port));
 
@@ -93,6 +96,7 @@ export function useProjects() {
     refresh,
     create,
     remove,
+    update,
     addPort,
     removePort,
     killPort,

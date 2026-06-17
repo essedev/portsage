@@ -302,6 +302,23 @@ fn cmd_release(
     Ok(())
 }
 
+fn cmd_rename(
+    client: &Client,
+    mode: OutputMode,
+    current: String,
+    new_name: Option<String>,
+    path: Option<String>,
+) -> Result<(), CliError> {
+    // Surface the "nothing to change" case as a usage error (exit 2) rather
+    // than bouncing off the backend's validation with a generic exit 1.
+    if new_name.is_none() && path.is_none() {
+        return Err(CliError::NoTargetSpecified("a new name or --path"));
+    }
+    let project = client.update_project(&current, new_name.as_deref(), path.as_deref())?;
+    output::print_project_detail(mode, &project)?;
+    Ok(())
+}
+
 fn cmd_scan(client: &Client, mode: OutputMode, unmanaged: bool) -> Result<(), CliError> {
     let ports = if unmanaged {
         client.list_unmanaged()?
@@ -716,6 +733,11 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
             here,
         } => cmd_remove(&client, mode, service, project, here),
         Command::Release { name, here } => cmd_release(&client, mode, name, here, yes),
+        Command::Rename {
+            current,
+            new_name,
+            path,
+        } => cmd_rename(&client, mode, current, new_name, path),
         Command::Scan { unmanaged } => cmd_scan(&client, mode, unmanaged),
         Command::Kill { port } => cmd_kill(&client, mode, port, yes),
         Command::KillProject { name, here } => cmd_kill_project(&client, mode, name, here, yes),
@@ -896,6 +918,43 @@ mod tests {
         };
         let result = run(cli);
         assert!(result.is_ok(), "expected ok, got {result:?}");
+    }
+
+    #[test]
+    fn run_rename_round_trips_against_mock_server() {
+        let (path, _dir) = spawn_canned_server(|req| {
+            assert!(req.contains("\"method\":\"update_project\""));
+            assert!(req.contains("\"current_name\":\"omnia\""));
+            assert!(req.contains("\"new_name\":\"omnia-ddt\""));
+            r#"{"result":{"id":1,"name":"omnia-ddt","path":"/new","range_start":4000,"range_end":4009,"created_at":"t","ports":[]}}"#
+                .into()
+        });
+        let cli = Cli {
+            global: opts_with_socket(path),
+            command: Command::Rename {
+                current: "omnia".into(),
+                new_name: Some("omnia-ddt".into()),
+                path: Some("/new".into()),
+            },
+        };
+        let result = run(cli);
+        assert!(result.is_ok(), "expected ok, got {result:?}");
+    }
+
+    #[test]
+    fn run_rename_without_name_or_path_is_usage_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("unused.sock");
+        let cli = Cli {
+            global: opts_with_socket(sock),
+            command: Command::Rename {
+                current: "omnia".into(),
+                new_name: None,
+                path: None,
+            },
+        };
+        let err = run(cli).unwrap_err();
+        assert_eq!(err.exit_code(), 2, "no fields to change is a usage error");
     }
 
     #[test]

@@ -25,6 +25,7 @@ function MainWindow() {
     refresh: refreshProjects,
     create,
     remove,
+    update,
     addPort,
     removePort,
     killPort,
@@ -118,6 +119,7 @@ function MainWindow() {
                 remove(name);
                 setSelected(null);
               }}
+              onUpdate={update}
               onAddPort={addPort}
               onRemovePort={removePort}
               onKillPort={killPort}

@@ -48,6 +48,7 @@ src/
     UnmanagedPortsPanel.tsx
     AddProjectForm.tsx
     AddPortForm.tsx
+    EditProjectForm.tsx     # Inline rename / change-path form in ProjectDetail
   features/
     projects/         # useProjects hook
   lib/
