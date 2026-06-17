@@ -111,6 +111,7 @@ The Rust backend listens on a Unix domain socket (see the table above for the pa
 |------------------------|-----------------------------------------------------------------------|----------------------|
 | `list_all`             | none                                                                  | `[ProjectStatus]`    |
 | `reserve_range`        | `name` (string, required), `path` (string, optional)                  | `ProjectStatus`      |
+| `update_project`       | `current_name` (string), `new_name` (string, optional), `new_path` (string, optional; empty clears the path) | `ProjectStatus` |
 | `register_port`        | `project` (string), `service` (string), `port` (int, inside range)    | `PortStatus`         |
 | `remove_port`          | `project` (string), `service` (string)                                | `"ok"`               |
 | `release_project`      | `name` (string)                                                       | `"ok"`               |
@@ -182,10 +183,10 @@ Unmanaged ports are filtered to ports >= 3000, excluding well-known system proce
 
 ## MCP integration
 
-The MCP server exposes 14 tools in three groups (full parity with the CLI):
+The MCP server exposes 15 tools in three groups (full parity with the CLI):
 
 - **Read**: `list_all`, `scan_active`, `list_unmanaged`, `next_range`, `get_config`, `find_project_by_path`.
-- **Mutate**: `reserve_range`, `register_port`, `remove_port`, `release_project`, `set_config`.
+- **Mutate**: `reserve_range`, `update_project`, `register_port`, `remove_port`, `release_project`, `set_config`.
 - **Act**: `kill_port`, `kill_project`, `open_in_browser`.
 
 **Claude Code**: install via `portsage mcp install` (canonical, works without the GUI running) or from the app (Settings > "Configure MCP" > Claude Code). `portsage mcp uninstall` and `portsage mcp status` complete the lifecycle. Patches to `~/.claude.json` / `~/.claude/skills/portsage/` / `~/.claude/settings.json` go through a parse-or-bail + atomic-tmp-then-rename helper - a corrupt config is never silently overwritten.

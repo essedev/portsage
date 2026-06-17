@@ -122,10 +122,10 @@ Le porte non gestite sono filtrate: porte >= 3000, esclusi processi noti di sist
 
 ## Integrazione MCP
 
-Il MCP server espone 14 tool in tre gruppi (parita' completa con la CLI):
+Il MCP server espone 15 tool in tre gruppi (parità completa con la CLI):
 
 - **Lettura**: `list_all`, `scan_active`, `list_unmanaged`, `next_range`, `get_config`, `find_project_by_path`.
-- **Mutazione**: `reserve_range`, `register_port`, `remove_port`, `release_project`, `set_config`.
+- **Mutazione**: `reserve_range`, `update_project`, `register_port`, `remove_port`, `release_project`, `set_config`.
 - **Azione**: `kill_port`, `kill_project`, `open_in_browser`.
 
 **Claude Code**: install via `portsage mcp install` (canonico, funziona senza GUI in esecuzione) oppure dall'app (Impostazioni > "Configura MCP" > Claude Code). `portsage mcp uninstall` e `portsage mcp status` completano il ciclo. Le patch a `~/.claude.json` / `~/.claude/skills/portsage/` / `~/.claude/settings.json` passano da un helper parse-or-bail + atomic-tmp-then-rename - un config corrotto non viene mai sovrascritto silenziosamente.

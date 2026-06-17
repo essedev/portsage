@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-06-17
+
+### Added
+- `update_project(current_name, new_name?, new_path?)`: rename a project and/or change its filesystem path while preserving its reserved range and every registered port. At least one of `new_name`/`new_path` must be provided; an empty `new_path` clears the stored path; renaming onto a name already in use is rejected. Wired end-to-end - DB CRUD (`Database::update_project`), `actions::update_project`, the `update_project` socket method, `portsage_client::Client`, the Local/Remote `BackendClient` adapter, the `update_project` Tauri command, the MCP tool (added to the install allowlist), and a `portsage rename <current> [new_name] [--path]` CLI subcommand
+- App UI: a pencil button in the `ProjectDetail` header opens an inline `EditProjectForm` to rename a project or change its path; the current selection survives the rename because it is keyed by the stable project id
+
 ## [0.12.1] - 2026-05-14
 
 ### Fixed
