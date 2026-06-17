@@ -11,6 +11,6 @@ members = [
 # `portsage --version`. The app's bundle version is tracked separately in
 # `src-tauri/tauri.conf.json` and `package.json` (see docs/RELEASING.md).
 [workspace.package]
-version = "0.12.2"
+version = "0.13.0"
 edition = "2021"
 authors = ["Simone Salerno"]

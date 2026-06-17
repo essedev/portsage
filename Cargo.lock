@@ -2884,7 +2884,7 @@ dependencies = [
 
 [[package]]
 name = "portsage"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "dirs 6.0.0",
  "libc",
@@ -2907,7 +2907,7 @@ dependencies = [
 
 [[package]]
 name = "portsage-cli"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "anstream 0.6.21",
  "anstyle",
@@ -2922,7 +2922,7 @@ dependencies = [
 
 [[package]]
 name = "portsage-client"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2932,7 +2932,7 @@ dependencies = [
 
 [[package]]
 name = "portsage-mcp"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "serde",
  "serde_json",
