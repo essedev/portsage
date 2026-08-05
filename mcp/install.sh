@@ -68,10 +68,12 @@ jq --arg dir "$MCP_DIR" '.mcpServers["portsage"] = {
 }' "$MCP_FILE" > "$MCP_FILE.tmp" && mv "$MCP_FILE.tmp" "$MCP_FILE"
 
 # Install skill
+# Symlink, not copy: a copy silently goes stale as soon as SKILL.md changes here,
+# and the installed skill keeps documenting tools that no longer match the server.
 echo "[3/4] Installing skill..."
 SKILL_DIR="$HOME/.claude/skills/$SKILL_NAME"
 mkdir -p "$SKILL_DIR"
-cp "$SCRIPT_DIR/SKILL.md" "$SKILL_DIR/SKILL.md"
+ln -sfn "$SCRIPT_DIR/SKILL.md" "$SKILL_DIR/SKILL.md"
 
 # Add permissions
 echo "[4/4] Adding tool permissions..."
