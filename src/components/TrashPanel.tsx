@@ -3,6 +3,7 @@ import { RotateCcw, Trash2 } from "lucide-react";
 import { UIText } from "@/components/ui/UIText";
 import { UIButton } from "@/components/ui/UIButton";
 import { UIBadge } from "@/components/ui/UIBadge";
+import { UIPageHeader } from "@/components/ui/UIPageHeader";
 import { useConfirm } from "@/lib/dialog";
 import { useToast } from "@/lib/toast";
 import * as cmd from "@/lib/commands";
@@ -103,23 +104,19 @@ export function TrashPanel({ onRestored, onChanged }: TrashPanelProps) {
   };
 
   return (
-    <div className="flex flex-col gap-[var(--spacing-3)]">
-      <div className="flex items-start justify-between gap-[var(--spacing-3)]">
-        <div className="flex flex-col gap-[var(--spacing-1)]">
-          <UIText variant="section" as="h3">
-            Trash
-          </UIText>
-          <UIText variant="body" className="text-text-secondary">
-            Released projects and removed ports, restorable for 30 days.
-          </UIText>
-        </div>
-        {entries.length > 0 && (
-          <UIButton variant="danger" onClick={handleEmpty}>
-            <Trash2 size={14} aria-hidden="true" />
-            Empty
-          </UIButton>
-        )}
-      </div>
+    <div className="flex flex-col gap-[var(--spacing-4)] p-[var(--spacing-5)]">
+      <UIPageHeader
+        title="Trash"
+        subtitle="Released projects and removed ports, restorable for 30 days."
+        actions={
+          entries.length > 0 && (
+            <UIButton variant="danger" onClick={handleEmpty}>
+              <Trash2 size={14} aria-hidden="true" />
+              Empty
+            </UIButton>
+          )
+        }
+      />
 
       {loading ? (
         <UIText variant="body" className="text-text-muted">
@@ -131,27 +128,45 @@ export function TrashPanel({ onRestored, onChanged }: TrashPanelProps) {
         </UIText>
       ) : (
         <div className="flex flex-col">
+          {/* Same column rhythm as the unmanaged-ports table: fixed widths on
+              the right-hand columns so the values line up down the page. */}
+          <div className="flex items-center gap-[var(--spacing-2)] pb-[var(--spacing-2)] mb-[var(--spacing-1)] border-b border-border-subtle">
+            <div className="w-16 shrink-0" />
+            <UIText variant="label" className="flex-1 min-w-0">
+              Name
+            </UIText>
+            <UIText variant="label" className="w-48 shrink-0">
+              What
+            </UIText>
+            <UIText variant="label" className="w-24 shrink-0 text-right">
+              Deleted
+            </UIText>
+            <div className="w-14 shrink-0" />
+          </div>
           {entries.map((entry) => (
             <div
               key={entry.id}
               className="flex items-center gap-[var(--spacing-2)] h-9 hover:bg-bg-elevated rounded-[var(--radius-sm)] px-[var(--spacing-1)] group"
             >
-              <UIBadge variant="inactive" className="shrink-0">
-                {entry.kind}
-              </UIBadge>
+              <div className="w-16 shrink-0">
+                <UIBadge variant="inactive">{entry.kind}</UIBadge>
+              </div>
               <UIText variant="body" className="flex-1 min-w-0 truncate">
                 {entry.label}
               </UIText>
               <UIText
                 variant="mono"
-                className="text-[11px]! text-text-secondary truncate max-w-[45%]"
+                className="w-48 shrink-0 truncate text-[11px]! text-text-secondary"
               >
                 {entry.detail}
               </UIText>
-              <UIText variant="mono" className="text-[11px]! text-text-muted shrink-0">
+              <UIText
+                variant="mono"
+                className="w-24 shrink-0 text-right text-[11px]! text-text-muted tabular-nums"
+              >
                 {entry.deleted_at.slice(0, 10)}
               </UIText>
-              <div className="flex shrink-0">
+              <div className="flex w-14 shrink-0 justify-end">
                 <UIButton
                   variant="ghost"
                   size="icon-sm"

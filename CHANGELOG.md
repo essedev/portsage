@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The trash view had a Settings-sized heading and no page padding: it was written as a Settings section and promoted to a view without being reworked. The heading of every main view now comes from a shared `UIPageHeader`, and the trash table uses the same column widths as the unmanaged-ports one
+
 ### Changed
 - Sidebar: Unmanaged, Prune and Trash moved out of the scrollable project list into the footer next to Settings. With 27 projects they used to sit below the fold; they are system views, not projects, and each row still appears only when it has something to show
 - The project list is sorted alphabetically instead of by range. Range order is registration order, which is arbitrary to the eye; both are stable, but only one lets you guess where a name will be. Sorting active-first was rejected on purpose, since rows would jump whenever a server starts or stops

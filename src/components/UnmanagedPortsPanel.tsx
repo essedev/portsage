@@ -1,6 +1,6 @@
 import { Power } from "lucide-react";
 import { UIText } from "@/components/ui/UIText";
-import { UIDivider } from "@/components/ui/UIDivider";
+import { UIPageHeader } from "@/components/ui/UIPageHeader";
 import { UIStatus } from "@/components/ui/UIStatus";
 import { UIButton } from "@/components/ui/UIButton";
 import { UIPortLink } from "@/components/ui/UIPortLink";
@@ -36,16 +36,10 @@ export function UnmanagedPortsPanel({ ports, onKill }: UnmanagedPortsPanelProps)
 
   return (
     <div className="flex flex-col gap-[var(--spacing-4)] p-[var(--spacing-5)]">
-      <div className="flex flex-col gap-[var(--spacing-1)]">
-        <UIText variant="title" as="h2">
-          Unmanaged ports
-        </UIText>
-        <UIText variant="body" className="text-text-secondary">
-          Active ports above 3000 not associated with any project
-        </UIText>
-      </div>
-
-      <UIDivider />
+      <UIPageHeader
+        title="Unmanaged ports"
+        subtitle="Active ports above 3000 not associated with any project"
+      />
 
       {ports.length === 0 ? (
         <UIText variant="body" className="text-text-muted">

@@ -104,6 +104,7 @@ scripts/
 - Font: system-ui (UI), ui-monospace (titles/technical data)
 - Import alias: `@/` for absolute imports
 - Custom dropdown (UISelect), never the native select
+- Every main view uses the same shell: `<div className="flex flex-col gap-[var(--spacing-4)] p-[var(--spacing-5)]">` plus `UIPageHeader` (title/h2 + one-line subtitle + optional actions + divider). Never hand-roll the heading: the trash view shipped once with a Settings-sized `section/h3` and no page padding because it was written as a Settings section first
 - Sidebar layout: the scrollable `<nav>` holds projects only (live, then the collapsed Archived section). System views (Unmanaged, Prune, Trash) are pinned in the footer with Settings via `SidebarSystemRow`, and each one renders only when its count is above zero
 - Projects are listed alphabetically, never re-ordered by live state: a list that reshuffles when a server starts is unusable
 

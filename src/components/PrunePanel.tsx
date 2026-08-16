@@ -3,6 +3,7 @@ import { Archive, FolderX, Clock } from "lucide-react";
 import { UIText } from "@/components/ui/UIText";
 import { UIButton } from "@/components/ui/UIButton";
 import { UIDivider } from "@/components/ui/UIDivider";
+import { UIPageHeader } from "@/components/ui/UIPageHeader";
 import { useToast } from "@/lib/toast";
 import { humanizeError } from "@/lib/errors";
 import * as cmd from "@/lib/commands";
@@ -85,15 +86,11 @@ export function PrunePanel({ onArchived }: PrunePanelProps) {
 
   return (
     <div className="flex flex-col gap-[var(--spacing-4)] p-[var(--spacing-5)]">
-      <div className="flex flex-col gap-[var(--spacing-1)]">
-        <UIText variant="title" as="h2">
-          Prune
-        </UIText>
-        <UIText variant="body" className="text-text-secondary">
-          Projects whose folder is gone, or untouched for a while. Archiving keeps the range and
-          the ports; a project comes back by itself when one of its ports starts listening.
-        </UIText>
-      </div>
+      <UIPageHeader
+        title="Prune"
+        subtitle="Projects whose folder is gone, or untouched for a while. Archiving keeps the range and the ports; a project comes back by itself when one of its ports starts listening."
+        divider={false}
+      />
 
       <div className="flex items-center gap-[var(--spacing-2)]">
         <UIText variant="label">Idle for at least</UIText>
