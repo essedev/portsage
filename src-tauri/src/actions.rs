@@ -404,58 +404,19 @@ pub fn parse_docker_ps_ids(stdout: &str) -> Vec<String> {
         .collect()
 }
 
-/// True when a path exists and carries at least one executable bit.
-fn is_executable(path: &std::path::Path) -> bool {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::metadata(path)
-            .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
-            .unwrap_or(false)
-    }
-    #[cfg(not(unix))]
-    {
-        path.is_file()
-    }
-}
-
-/// Look `name` up in a `PATH`-shaped string. Takes the variable as an argument
-/// rather than reading the environment so tests can drive it without mutating
-/// process-global state.
-fn find_in_path_var(path_var: &str, name: &str) -> Option<std::path::PathBuf> {
-    path_var
-        .split(':')
-        .filter(|dir| !dir.is_empty())
-        .map(|dir| std::path::Path::new(dir).join(name))
-        .find(|candidate| is_executable(candidate))
-}
-
-/// Locate the docker CLI: explicit override, then `PATH`, then the known
-/// install locations. Deliberately uncached - the app lives in the tray for
-/// days and Docker Desktop may well be installed after launch, so a cached
-/// `None` would keep failing until the next restart. The cost is a handful of
-/// `stat` calls on a path that runs once per kill.
+/// Locate the docker CLI. Shares the resolver every other external tool
+/// uses, plus the per-user Docker Desktop install that lives outside any
+/// system prefix.
 fn resolve_docker_bin() -> Option<std::path::PathBuf> {
-    if let Some(explicit) = std::env::var_os(DOCKER_BIN_ENV) {
-        let p = std::path::PathBuf::from(explicit);
-        if is_executable(&p) {
-            return Some(p);
-        }
+    if let Some(found) =
+        crate::toolpath::resolve("docker", Some(DOCKER_BIN_ENV), DOCKER_BIN_CANDIDATES)
+    {
+        return Some(found);
     }
-    if let Some(path_var) = std::env::var_os("PATH") {
-        if let Some(found) = find_in_path_var(&path_var.to_string_lossy(), "docker") {
-            return Some(found);
-        }
-    }
-    // Docker Desktop can also install per-user, outside any system prefix.
-    let home_candidate = std::env::var_os("HOME")
+    std::env::var_os("HOME")
         .map(std::path::PathBuf::from)
-        .map(|h| h.join(".docker/bin/docker"));
-    DOCKER_BIN_CANDIDATES
-        .iter()
-        .map(std::path::PathBuf::from)
-        .chain(home_candidate)
-        .find(|c| is_executable(c))
+        .map(|h| h.join(".docker/bin/docker"))
+        .filter(|p| crate::toolpath::is_executable(p))
 }
 
 /// True when a failed `docker ps` failed because the daemon is not reachable,
@@ -791,42 +752,6 @@ mod tests {
     }
 
     // --- docker CLI resolution ---
-
-    /// Write an executable stub at `dir/name` and return its path.
-    fn write_stub(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
-        use std::os::unix::fs::PermissionsExt;
-        let path = dir.join(name);
-        std::fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        path
-    }
-
-    fn temp_dir(tag: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("portsage-test-{tag}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    #[test]
-    fn find_in_path_var_returns_first_executable_hit() {
-        let first = temp_dir("path-first");
-        let second = temp_dir("path-second");
-        let expected = write_stub(&first, "docker");
-        write_stub(&second, "docker");
-        let path_var = format!("{}:{}", first.display(), second.display());
-        assert_eq!(find_in_path_var(&path_var, "docker"), Some(expected));
-    }
-
-    #[test]
-    fn find_in_path_var_skips_non_executable_and_missing_entries() {
-        let dir = temp_dir("path-noexec");
-        // A plain file with no executable bit must not be picked up: this is
-        // what a stray `docker` config file or a wrapper without +x looks like.
-        let plain = dir.join("docker");
-        std::fs::write(&plain, "not a binary").unwrap();
-        let path_var = format!("/nonexistent-dir-portsage::{}", dir.display());
-        assert_eq!(find_in_path_var(&path_var, "docker"), None);
-    }
 
     #[test]
     fn is_daemon_unreachable_matches_both_cli_wordings() {

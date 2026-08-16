@@ -119,7 +119,7 @@ scripts/
 - Deletions are hard, but `delete_project` / `remove_port` archive a JSON snapshot into the `trash` table in the same transaction and return its id (that id is what powers the Undo in the toast). Adding a field to `projects` / `ports` means updating `db.rs::TrashPayload` and bumping `TRASH_PAYLOAD_VERSION`. The global "always soft delete" rule does not apply here and DATABASE_SCHEMA.md says why
 - `archived_at` on `projects` is not a soft delete: an archived project keeps its name, range and ports and stays subject to every constraint. It only drops out of the default listing, so a forgotten filter shows a row too many, never corrupts state. New columns go through `db.rs::add_column_if_missing`, since `CREATE TABLE IF NOT EXISTS` never alters an existing table
 - Staleness comes from `activity.rs`: the newest of the directory mtime and `.git/logs/HEAD` (the reflog). Neither works alone - `.git/HEAD` only moves on checkout, and the directory misses work done deeper in the tree
-- Shelling out to a tool the user installed (docker, ssh, ...) must resolve the binary explicitly: an app bundle launched by launchd only has `PATH=/usr/bin:/bin:/usr/sbin:/sbin`. See `actions::resolve_docker_bin`
+- Never `Command::new("<bare name>")` for an external tool: go through `toolpath::resolve` / `resolve_or_bare`. A launchd-started bundle has only `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, a terminal-started one has the user's PATH, and each is missing what the other has (`docker` in the first case, `/usr/sbin/lsof` in the second). Both failures are silent
 
 ### MCP server
 - Thin client: no direct DB access

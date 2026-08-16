@@ -17,6 +17,10 @@ mod forwards;
 mod paths;
 mod scanner;
 mod socket;
+// Explicit resolution for every external binary we shell out to. See the
+// module docs: a launchd-started bundle and a terminal-started one disagree
+// on PATH, and both are missing something.
+mod toolpath;
 
 use db::Database;
 use std::path::PathBuf;

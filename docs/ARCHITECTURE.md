@@ -47,6 +47,7 @@ The same Rust binary runs as the macOS GUI (`gui` cargo feature, default) and as
 | `commands.rs` | Thin Tauri wrappers over `actions::*` and `backends::*`. The only Tauri layer. |
 | `socket.rs`   | Unix socket server (async). Speaks the wire protocol to the MCP server, the CLI, and other clients. |
 | `activity.rs` | Filesystem staleness signals behind `prune`. No DB or Tauri deps. |
+| `toolpath.rs` | Resolves every external binary we shell out to (`docker`, `lsof`, `ps`, `ss`): env override, then `PATH`, then known absolute locations. |
 | `scanner.rs`  | Port scanner. Per-OS impls under `mod macos` (lsof + ps) and `mod linux` (`/proc/net/tcp` + `ss` fallback), selected by `#[cfg(target_os)]`. |
 | `backends.rs` | `BackendTarget` / `BackendManager` (owns SSH tunnels) / `BackendRouter` (active target) / `BackendClient` (Local/Remote adapter every Tauri command dispatches through). No Tauri deps. |
 | `forwards.rs` | Phase 3 multi-host: `ForwardManager` owns per-(backend, port) SSH local-forward state. `ForwardController` + `LocalPortProbe` traits for testability. No Tauri deps. |
@@ -180,7 +181,7 @@ Unmanaged ports are filtered to ports >= 3000, excluding well-known system proce
 
 **Docker-published port**: every container port published on macOS is held by a single `com.docker.backend` pid (`docker-proxy` on Linux), so signalling that pid would tear down every container at once. The port is instead resolved to its container with `docker ps --filter publish=<port>` and stopped with `docker stop --time 2`, which runs its own SIGTERM/SIGKILL escalation. The filter matches IP-scoped bindings (`127.0.0.1:4062->5432`) and published ranges, so no fallback parsing of `{{.Ports}}` is needed.
 
-Finding the docker CLI is its own problem: a macOS app bundle launched by launchd inherits `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, which contains no docker binary, while the same build launched from a terminal inherits the user's PATH and works. `actions::resolve_docker_bin` therefore tries `PORTSAGE_DOCKER_BIN`, then `PATH`, then a list of known install locations (Docker Desktop, Homebrew, OrbStack, distro packages, `~/.docker/bin`). It is deliberately uncached: the tray app runs for days and Docker may be installed after launch.
+Finding the docker CLI is its own problem: a macOS app bundle launched by launchd inherits `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, which contains no docker binary, while the same build launched from a terminal inherits the user's PATH and works. The inverse bites the scanner: `lsof` is in `/usr/sbin`, which launchd has and many interactive shells do not, and an unresolvable `lsof` makes the whole machine look idle. So `toolpath.rs` resolves every external binary the same way - env override, then `PATH`, then known absolute locations - and `actions::resolve_docker_bin` adds the per-user `~/.docker/bin` install on top. Resolution is deliberately uncached: the tray app runs for days and a tool may be installed after launch.
 
 The docker failure modes stay separate on the wire (`docker_cli_missing`, `docker_daemon_down`, `docker_no_container`, `docker_error`) because each asks something different of the user. The frontend renders them from `src/lib/killOutcome.ts`, keyed by a `Record<KillOutcome, ...>` so a new variant fails the typecheck rather than silently showing nothing.
 

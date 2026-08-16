@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-08-16
+
+### Fixed
+- The port scanner resolves `lsof`, `ps` and `ss` explicitly instead of trusting the inherited `PATH`. `lsof` lives in `/usr/sbin`, which launchd includes but many interactive shells do not, so a build started from a terminal (`pnpm tauri dev`) could report an empty machine while `lsof` worked fine in the same shell. The failure was silent: no listening ports looks exactly like nothing running
+
+### Internal
+- New `src-tauri/src/toolpath.rs` owns external-binary resolution (env override, then `PATH`, then known absolute locations) for every tool Portsage shells out to. `actions::resolve_docker_bin` now uses it instead of its own copy
+
 ## [0.14.0] - 2026-08-16
 
 ### Added

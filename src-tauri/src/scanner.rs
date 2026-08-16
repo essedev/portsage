@@ -120,10 +120,16 @@ fn scan_impl() -> Vec<ActivePort> {
 #[cfg(target_os = "macos")]
 mod macos {
     use super::ActivePort;
-    use std::process::Command;
+    use crate::toolpath;
+
+    /// `lsof` lives in `/usr/sbin`, which is in launchd's PATH but missing
+    /// from plenty of interactive shells. Resolving it explicitly keeps a
+    /// `pnpm tauri dev` run from silently reporting an empty machine.
+    const LSOF_CANDIDATES: &[&str] = &["/usr/sbin/lsof", "/usr/bin/lsof", "/opt/homebrew/bin/lsof"];
+    const PS_CANDIDATES: &[&str] = &["/bin/ps", "/usr/bin/ps"];
 
     pub fn scan_via_lsof() -> Vec<ActivePort> {
-        let output = Command::new("lsof")
+        let output = toolpath::command(toolpath::resolve_or_bare("lsof", LSOF_CANDIDATES))
             .args(["-iTCP", "-sTCP:LISTEN", "-nP"])
             .output();
 
@@ -156,7 +162,7 @@ mod macos {
     }
 
     fn resolve_process_name(pid: i64) -> Option<String> {
-        let output = Command::new("ps")
+        let output = toolpath::command(toolpath::resolve_or_bare("ps", PS_CANDIDATES))
             .args(["-p", &pid.to_string(), "-o", "comm="])
             .output()
             .ok()?;
@@ -172,10 +178,14 @@ mod macos {
 #[cfg(target_os = "linux")]
 mod linux {
     use super::ActivePort;
+    use crate::toolpath;
     use std::collections::HashMap;
     use std::fs;
     use std::io;
-    use std::process::Command;
+
+    /// `ss` is in `/usr/sbin` or `/sbin` on most distros, neither of which is
+    /// guaranteed to be on a service unit's PATH.
+    const SS_CANDIDATES: &[&str] = &["/usr/sbin/ss", "/sbin/ss", "/usr/bin/ss", "/bin/ss"];
 
     /// TCP_LISTEN state in `/proc/net/tcp` (kernel constant `TCP_LISTEN = 10`,
     /// always rendered as zero-padded hex).
@@ -216,7 +226,10 @@ mod linux {
     /// has permission to inspect; without root this is limited to the
     /// caller's own processes - same constraint as scan_via_proc.
     pub fn scan_via_ss() -> Vec<ActivePort> {
-        let output = match Command::new("ss").args(["-ltnpH"]).output() {
+        let output = match toolpath::command(toolpath::resolve_or_bare("ss", SS_CANDIDATES))
+            .args(["-ltnpH"])
+            .output()
+        {
             Ok(o) => o,
             Err(_) => return Vec::new(),
         };
