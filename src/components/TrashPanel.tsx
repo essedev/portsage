@@ -163,7 +163,7 @@ export function TrashPanel({ onRestored, onChanged }: TrashPanelProps) {
             },
             {
               key: "restore",
-              width: "w-8",
+              width: "w-10",
               align: "center",
               cell: (e: TrashEntry) => (
                 <UIButton
@@ -180,7 +180,7 @@ export function TrashPanel({ onRestored, onChanged }: TrashPanelProps) {
             },
             {
               key: "purge",
-              width: "w-8",
+              width: "w-10",
               align: "center",
               cell: (e: TrashEntry) => (
                 <UIButton

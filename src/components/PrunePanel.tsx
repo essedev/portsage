@@ -123,7 +123,7 @@ export function PrunePanel({ onArchived }: PrunePanelProps) {
             columns={[
               {
                 key: "pick",
-                width: "w-8",
+                width: "w-10",
                 align: "center",
                 cell: (c: StaleProject) => (
                   <input

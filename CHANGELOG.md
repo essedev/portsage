@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `UITable` is a framed object rather than bare rows: outline, rounded corners, a tinted header strip and hairline separators between rows. Rows floating on the page background read as a list that happens to have labels; the frame says where the data starts and ends. Applies to all four tables at once
+
 ## [0.14.2] - 2026-08-16
 
 ### Fixed

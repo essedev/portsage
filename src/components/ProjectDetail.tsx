@@ -177,7 +177,7 @@ export function ProjectDetail({
   const portColumns: UITableColumn<PortStatus>[] = [
     {
       key: "status",
-      width: "w-7",
+      width: "w-10",
       align: "center",
       cell: (p) => <UIStatus active={p.active} />,
     },
@@ -224,7 +224,7 @@ export function ProjectDetail({
     },
     {
       key: "forward",
-      width: "w-8",
+      width: "w-10",
       align: "center",
       cell: (p) =>
         isRemote ? (
@@ -237,7 +237,7 @@ export function ProjectDetail({
     },
     {
       key: "kill",
-      width: "w-8",
+      width: "w-10",
       align: "center",
       cell: (p) =>
         p.active ? (
@@ -255,7 +255,7 @@ export function ProjectDetail({
     },
     {
       key: "remove",
-      width: "w-8",
+      width: "w-10",
       align: "center",
       cell: (p) => (
         <UIButton
