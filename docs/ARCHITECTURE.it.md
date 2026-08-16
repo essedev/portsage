@@ -2,7 +2,7 @@
 
 > 🇬🇧 [Read in English](ARCHITECTURE.md)
 
-Menubar app per macOS che gestisce l'allocazione delle porte tra progetti di sviluppo, con una variante server headless per Linux e una modalita' multi-host nella UI per dev box remote.
+Menubar app per macOS che gestisce l'allocazione delle porte tra progetti di sviluppo, con una variante server headless per Linux e una modalità multi-host nella UI per dev box remote.
 
 ## Problema
 
@@ -35,30 +35,30 @@ Lavorare con AI su 4-5 progetti in parallelo (React/Vite + Docker con PostgreSQL
                           \-> SSH unix-socket tunnel --> portsage-server remoto (Linux)
 ```
 
-Lo stesso binario Rust gira come GUI macOS (cargo feature `gui`, default) e come server headless Linux (`--no-default-features`, esclude tutta la toolchain Tauri). Su macOS il flag `--headless` sopprime tray e finestre ed espone solo il socket; cosi' la CLI fa autospawn del backend quando nessuna GUI e' in esecuzione.
+Lo stesso binario Rust gira come GUI macOS (cargo feature `gui`, default) e come server headless Linux (`--no-default-features`, esclude tutta la toolchain Tauri). Su macOS il flag `--headless` sopprime tray e finestre ed espone solo il socket; così la CLI fa autospawn del backend quando nessuna GUI è in esecuzione.
 
 ### Moduli del backend Rust
 
-| Modulo        | Responsabilita'                                                            |
+| Modulo        | Responsabilità                                                            |
 |---------------|----------------------------------------------------------------------------|
-| `paths.rs`    | Risoluzione path per OS (Application Support su macOS, XDG su Linux). Unico posto dove `dirs::*` e' ammesso. |
+| `paths.rs`    | Risoluzione path per OS (Application Support su macOS, XDG su Linux). Unico posto dove `dirs::*` è ammesso. |
 | `db.rs`       | Setup SQLite, migrazioni, tutta la CRUD. Condiviso via `Arc<Database>`. Vedi [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md). |
 | `actions.rs`  | Logica di dominio condivisa tra Tauri commands e socket dispatcher. Nessuna dipendenza Tauri. |
 | `commands.rs` | Wrapper Tauri sottili su `actions::*` e `backends::*`. Unico layer Tauri. |
 | `socket.rs`   | Server Unix socket (async). Parla il protocollo wire con MCP server, CLI e altri client. |
 | `scanner.rs`  | Port scanner. Impl per-OS sotto `mod macos` (lsof + ps) e `mod linux` (`/proc/net/tcp` + fallback `ss`), selezionate da `#[cfg(target_os)]`. |
 | `backends.rs` | `BackendTarget` / `BackendManager` (gestisce i tunnel SSH) / `BackendRouter` (target attivo) / `BackendClient` (adapter Local/Remote attraverso cui ogni Tauri command passa). Nessuna dipendenza Tauri. |
-| `forwards.rs` | Fase 3 multi-host: `ForwardManager` gestisce lo stato per-(backend, porta) dei forward SSH locali. Tratti `ForwardController` + `LocalPortProbe` per testabilita'. Nessuna dipendenza Tauri. |
+| `forwards.rs` | Fase 3 multi-host: `ForwardManager` gestisce lo stato per-(backend, porta) dei forward SSH locali. Tratti `ForwardController` + `LocalPortProbe` per testabilità. Nessuna dipendenza Tauri. |
 
 ### MCP server
 
 Thin client Python. Legge da stdio (transport Claude Code), inoltra le richieste JSON al socket Unix, restituisce la risposta. Nessun accesso DB diretto.
 
-I quattro file sorgente (`server.py`, `pyproject.toml`, `uv.lock`, `SKILL.md`) sono embedded nel binario CLI via `include_str!` in `crates/portsage-cli/src/mcp.rs`. `portsage mcp install` li estrae in `<data_dir>/portsage/mcp/`, lancia `uv sync` e patcha `~/.claude.json` + `~/.claude/skills/portsage/` + `~/.claude/settings.json` atomicamente. La directory `mcp/` nel repo resta source of truth - ogni modifica li' richiede rebuild del CLI prima di shippare.
+I quattro file sorgente (`server.py`, `pyproject.toml`, `uv.lock`, `SKILL.md`) sono embedded nel binario CLI via `include_str!` in `crates/portsage-cli/src/mcp.rs`. `portsage mcp install` li estrae in `<data_dir>/portsage/mcp/`, lancia `uv sync` e patcha `~/.claude.json` + `~/.claude/skills/portsage/` + `~/.claude/settings.json` atomicamente. La directory `mcp/` nel repo resta source of truth - ogni modifica lì richiede rebuild del CLI prima di shippare.
 
 ### CLI
 
-`portsage` e' un binario clap in `crates/portsage-cli/`. Parla col backend via `portsage-client` (sync UnixStream), mai col DB direttamente. Auto-spawna il binario Tauri in `--headless` se nessuna istanza e' in esecuzione.
+`portsage` è un binario clap in `crates/portsage-cli/`. Parla col backend via `portsage-client` (sync UnixStream), mai col DB direttamente. Auto-spawna il binario Tauri in `--headless` se nessuna istanza è in esecuzione.
 
 Per la lista completa dei sottocomandi vedi il [README](../README.md#cli).
 
@@ -73,15 +73,15 @@ Per la lista completa dei sottocomandi vedi il [README](../README.md#cli).
 
 Il server headless accetta `--socket <path>` ed `PORTSAGE_SOCKET=<path>` per forzare la posizione del socket; l'unit systemd di sistema usa questo per metterlo in `/run/portsage/portsage.sock`.
 
-La cartella padre del socket viene creata con mode `0700`, il file socket con `0600` per install per-utente e `0660` quando la padre e' gestita esternamente (install systemd di gruppo) - vedi `socket.rs` per il selettore.
+La cartella padre del socket viene creata con mode `0700`, il file socket con `0600` per install per-utente e `0660` quando la padre è gestita esternamente (install systemd di gruppo) - vedi `socket.rs` per il selettore.
 
 ## Multi-host
 
-La storia single-host (UI Mac che parla a un backend locale) e' il default. L'estensione multi-host permette alla UI Mac di configurare server Portsage remoti e trattarli come backend di primo livello.
+La storia single-host (UI Mac che parla a un backend locale) è il default. L'estensione multi-host permette alla UI Mac di configurare server Portsage remoti e trattarli come backend di primo livello.
 
 - **Fase 1 - Server headless Linux.** Build Linux x86_64 (`portsage-server`), scanner per-OS, path XDG, unit systemd + installer idempotente in `packaging/linux/`.
 - **Fase 2 - Backend remoto in UI.** Tabella `remote_backends`, `BackendManager` con tunnel SSH unix-socket per backend (state machine + mutex per backend), `BackendRouter` con target corrente persistito. Ogni Tauri command passa per il `BackendClient` attivo. Il `BackendSwitcher` in sidebar mostra il pallino di stato live via eventi `tunnel://state-changed`.
-- **Fase 3 - Auto SSH port forwarding.** Quando un backend remoto ha porte registrate, Portsage apre `ssh -O forward -L <port>:localhost:<port>` sullo stesso ControlMaster del tunnel di protocollo. Due modalita' di ownership del ControlMaster: piggyback sul `ControlMaster auto` del `ssh_config` utente (preferita; non viene mai chiusa), oppure apri un master Portsage-managed in `paths::state_dir()/cm-<alias>.sock`. La probe di collisione porte locali emette "port X is in use locally by node (pid 12345)" prima dell'`ssh`. Timer di sync periodico (60s) come safety-net per mutazioni remote.
+- **Fase 3 - Auto SSH port forwarding.** Quando un backend remoto ha porte registrate, Portsage apre `ssh -O forward -L <port>:localhost:<port>` sullo stesso ControlMaster del tunnel di protocollo. Due modalità di ownership del ControlMaster: piggyback sul `ControlMaster auto` del `ssh_config` utente (preferita; non viene mai chiusa), oppure apri un master Portsage-managed in `paths::state_dir()/cm-<alias>.sock`. La probe di collisione porte locali emette "port X is in use locally by node (pid 12345)" prima dell'`ssh`. Timer di sync periodico (60s) come safety-net per mutazioni remote.
 - **Fase 4 - Rifinitura.** Migrazione progetti tra backend, dashboard di salute, CLI `portsage backends list / add / remove`, auto-discovery host Tailscale. Non iniziata.
 
 Il piano completo + decisioni di design vivono in [multi-host-evolution.md](multi-host-evolution.md). Leggilo prima di toccare `scanner.rs`, `backends.rs`, `forwards.rs` o le parti multi-host di `db.rs`.
@@ -97,9 +97,15 @@ Vedi [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) per il dettaglio tabella per tabel
 ## Port scanning
 
 - **macOS**: `lsof -iTCP -sTCP:LISTEN -nP`, nomi processo risolti con `ps -p <pid> -o comm=` per aggirare il troncamento di lsof.
-- **Linux**: parsing di `/proc/net/tcp` (+ `/proc/net/tcp6`) e risoluzione del pid proprietario via readlink di `/proc/<pid>/fd/*`; fallback a `ss -tlnp` se `/proc` e' ristretto.
+- **Linux**: parsing di `/proc/net/tcp` (+ `/proc/net/tcp6`) e risoluzione del pid proprietario via readlink di `/proc/<pid>/fd/*`; fallback a `ss -tlnp` se `/proc` è ristretto.
 
-Le porte non gestite sono filtrate: porte >= 3000, esclusi processi noti di sistema (AirPlay, CUPS, mDNS, Spotlight, sshd, ecc.). La blocklist e' in `scanner.rs::is_system_process`.
+Le porte non gestite sono filtrate: porte >= 3000, esclusi processi noti di sistema (AirPlay, CUPS, mDNS, Spotlight, sshd, ecc.). La blocklist è in `scanner.rs::is_system_process`.
+
+## Kill di una porta
+
+Processo normale: SIGTERM, 2s di grazia, poi SIGKILL. Porta pubblicata da Docker: su macOS tutte le porte dei container sono in ascolto sotto un solo pid `com.docker.backend`, quindi il segnale la butterebbe giù per tutti; la porta viene risolta al container con `docker ps --filter publish=<porta>` e fermata con `docker stop`.
+
+Il punto non ovvio è trovare il CLI docker: un app bundle avviato da launchd eredita `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, dove docker non c'è, mentre lo stesso binario avviato da terminale eredita la PATH dell'utente e funziona. `actions::resolve_docker_bin` prova `PORTSAGE_DOCKER_BIN`, poi la `PATH`, poi le install location note. Dettaglio nella [versione inglese](ARCHITECTURE.md#killing-a-port).
 
 ## Stack
 
@@ -138,7 +144,7 @@ I test coprono il **core di dominio** (allocazione porte, parsing lsof / `/proc/
 
 - Test Rust inline sotto `#[cfg(test)] mod tests` in ogni modulo; SQLite in-memory via `Database::in_memory()`. Lancia il workspace con `cargo test` dalla root.
 - Test frontend accanto ai sorgenti come `*.test.ts`, lanciati via `vitest`.
-- Protocollo socket: preferisci test end-to-end che spawnano un `UnixListener` reale ed esercitano `portsage_client::Client` su `handle_request` (vedi `socket.rs::end_to_end_round_trip_via_real_client`) - cosi' becchi le derive tra deserializer client e shape della risposta server.
+- Protocollo socket: preferisci test end-to-end che spawnano un `UnixListener` reale ed esercitano `portsage_client::Client` su `handle_request` (vedi `socket.rs::end_to_end_round_trip_via_real_client`) - così becchi le derive tra deserializer client e shape della risposta server.
 - Race condition in `Database::create_project`: regression test dedicato (`concurrent_create_project_produces_no_overlapping_ranges`).
 
 ## UI
@@ -179,7 +185,7 @@ Ridimensionabile (min 700x400) con titlebar trasparente.
 - Click sul numero di porta apre `http://localhost:PORTA` nel browser predefinito.
 - Bottone Power per singola porta (warning/ambra): chiede conferma e invia SIGTERM, escalation a SIGKILL dopo 2s.
 - Aggiunta servizi con dropdown porte libere nel range.
-- Toolbar split: azioni di navigazione (Finder / Terminale - nascoste se il backend attivo e' Remote) a sinistra, azioni distruttive (Stop tutte / Elimina progetto) a destra.
+- Toolbar split: azioni di navigazione (Finder / Terminale - nascoste se il backend attivo è Remote) a sinistra, azioni distruttive (Stop tutte / Elimina progetto) a destra.
 - Indicatori di forward Fase 3: freccia accanto a ogni porta remota - ambra (forwarded), rossa (failed, hover per il motivo), spenta (cancellata, click per riaprire).
 
 **Porte non gestite**

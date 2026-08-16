@@ -35,11 +35,12 @@ pub struct ActivePort {
 
 /// Result of a kill attempt against a single PID.
 ///
-/// `DockerStopped` and `DockerError` are emitted when the listening PID
-/// belongs to a Docker port-forwarding proxy (`com.docker.backend`,
-/// `vpnkit`, `docker-proxy`): we cannot kill the proxy without nuking
-/// every other container's published port, so the action resolves the
-/// host port to its container and calls `docker stop` instead.
+/// The `Docker*` variants are emitted when the listening PID belongs to a
+/// Docker port-forwarding proxy (`com.docker.backend`, `vpnkit`,
+/// `docker-proxy`): we cannot kill the proxy without nuking every other
+/// container's published port, so the action resolves the host port to its
+/// container and calls `docker stop` instead. The failure cases stay
+/// separate because each one asks something different of the user.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum KillOutcome {
@@ -47,7 +48,16 @@ pub enum KillOutcome {
     Killed,
     NotActive,
     PermissionDenied,
+    /// `docker stop` succeeded on at least one container.
     DockerStopped,
+    /// No docker CLI found in `PATH`, in the known install locations, or via
+    /// `PORTSAGE_DOCKER_BIN`.
+    DockerCliMissing,
+    /// The CLI ran but could not reach the daemon (Docker Desktop stopped).
+    DockerDaemonDown,
+    /// Docker is reachable but no running container publishes that host port.
+    DockerNoContainer,
+    /// Anything else: `docker stop` refused, or an unexpected CLI failure.
     DockerError,
 }
 

@@ -132,7 +132,7 @@ Wire types (`crates/portsage-client/src/types.rs` is the source of truth):
 - `ActivePort`: `{ port, pid, process }`
 - `RangeBounds`: `{ range_start, range_end }`
 - `ConfigSnapshot`: `{ base_port, range_size }` (string values matching the SQLite TEXT column)
-- `KillOutcome`: `"terminated" | "killed" | "not_active" | "permission_denied"`
+- `KillOutcome`: `"terminated" | "killed" | "not_active" | "permission_denied" | "docker_stopped" | "docker_cli_missing" | "docker_daemon_down" | "docker_no_container" | "docker_error"` (see [Killing a port](#killing-a-port))
 - `KillEntry`: `{ port, outcome: KillOutcome }`
 - `RemoteBackend`: `{ id, name, ssh_alias, remote_socket_path, local_socket_path, auto_forward_enabled, created_at }`
 
@@ -161,6 +161,18 @@ See [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) for the full table-by-table breakdo
 - **Linux**: parses `/proc/net/tcp` (+ `/proc/net/tcp6`) and resolves the owning pid via `/proc/<pid>/fd/*` readlinks; falls back to `ss -tlnp` if `/proc` is restricted (e.g. inside a container without `--cap-add SYS_PTRACE`).
 
 Unmanaged ports are filtered to ports >= 3000, excluding well-known system processes (AirPlay, CUPS, mDNS, Spotlight, sshd, etc.). The blocklist is in `scanner.rs::is_system_process`.
+
+## Killing a port
+
+`actions::kill_active_port` picks one of two strategies from the name of the listening process.
+
+**Plain process**: SIGTERM, 2s grace (`KILL_GRACE`), then SIGKILL. Outcome is `terminated`, `killed`, or `permission_denied`.
+
+**Docker-published port**: every container port published on macOS is held by a single `com.docker.backend` pid (`docker-proxy` on Linux), so signalling that pid would tear down every container at once. The port is instead resolved to its container with `docker ps --filter publish=<port>` and stopped with `docker stop --time 2`, which runs its own SIGTERM/SIGKILL escalation. The filter matches IP-scoped bindings (`127.0.0.1:4062->5432`) and published ranges, so no fallback parsing of `{{.Ports}}` is needed.
+
+Finding the docker CLI is its own problem: a macOS app bundle launched by launchd inherits `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, which contains no docker binary, while the same build launched from a terminal inherits the user's PATH and works. `actions::resolve_docker_bin` therefore tries `PORTSAGE_DOCKER_BIN`, then `PATH`, then a list of known install locations (Docker Desktop, Homebrew, OrbStack, distro packages, `~/.docker/bin`). It is deliberately uncached: the tray app runs for days and Docker may be installed after launch.
+
+The docker failure modes stay separate on the wire (`docker_cli_missing`, `docker_daemon_down`, `docker_no_container`, `docker_error`) because each asks something different of the user. The frontend renders them from `src/lib/killOutcome.ts`, keyed by a `Record<KillOutcome, ...>` so a new variant fails the typecheck rather than silently showing nothing.
 
 ## Stack
 

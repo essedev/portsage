@@ -280,6 +280,9 @@ fn outcome_label(outcome: KillOutcome) -> &'static str {
         KillOutcome::NotActive => "not_active",
         KillOutcome::PermissionDenied => "permission_denied",
         KillOutcome::DockerStopped => "docker_stopped",
+        KillOutcome::DockerCliMissing => "docker_cli_missing",
+        KillOutcome::DockerDaemonDown => "docker_daemon_down",
+        KillOutcome::DockerNoContainer => "docker_no_container",
         KillOutcome::DockerError => "docker_error",
     }
 }
@@ -291,6 +294,14 @@ fn outcome_human(outcome: KillOutcome) -> (Style, &'static str) {
         KillOutcome::NotActive => (dim(), "nothing was listening"),
         KillOutcome::PermissionDenied => (red(), "permission denied"),
         KillOutcome::DockerStopped => (green(), "container stopped (docker)"),
-        KillOutcome::DockerError => (red(), "docker stop failed (no matching container or daemon down)"),
+        KillOutcome::DockerCliMissing => (
+            red(),
+            "docker CLI not found (set PORTSAGE_DOCKER_BIN to its path)",
+        ),
+        KillOutcome::DockerDaemonDown => {
+            (red(), "docker daemon not reachable (is Docker running?)")
+        }
+        KillOutcome::DockerNoContainer => (red(), "no running container publishes this port"),
+        KillOutcome::DockerError => (red(), "docker stop failed"),
     }
 }

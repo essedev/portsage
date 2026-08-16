@@ -6,6 +6,7 @@ import { UIButton } from "@/components/ui/UIButton";
 import { UIPortLink } from "@/components/ui/UIPortLink";
 import { useConfirm } from "@/lib/dialog";
 import { useToast } from "@/lib/toast";
+import { describeKillOutcome } from "@/lib/killOutcome";
 import type { UnmanagedPort, KillOutcome } from "@/lib/types";
 
 interface UnmanagedPortsPanelProps {
@@ -28,28 +29,9 @@ export function UnmanagedPortsPanel({ ports, onKill }: UnmanagedPortsPanelProps)
     if (!ok) return;
     const outcome = await onKill(p.port);
     if (!outcome) return;
-    switch (outcome) {
-      case "terminated":
-        showSuccess(`Port ${p.port} stopped`);
-        break;
-      case "killed":
-        showSuccess(`Port ${p.port} force-killed (SIGKILL)`);
-        break;
-      case "not_active":
-        showSuccess(`Port ${p.port} was already free`);
-        break;
-      case "permission_denied":
-        showError(`Cannot stop port ${p.port}: permission denied (different user?)`);
-        break;
-      case "docker_stopped":
-        showSuccess(`Port ${p.port} container stopped (docker)`);
-        break;
-      case "docker_error":
-        showError(
-          `Cannot stop port ${p.port}: docker container not found or daemon unavailable`,
-        );
-        break;
-    }
+    const report = describeKillOutcome(p.port, outcome);
+    if (report.ok) showSuccess(report.message);
+    else showError(report.message);
   };
 
   return (

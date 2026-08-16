@@ -15,6 +15,9 @@ export type KillOutcome =
   | "not_active"
   | "permission_denied"
   | "docker_stopped"
+  | "docker_cli_missing"
+  | "docker_daemon_down"
+  | "docker_no_container"
   | "docker_error";
 
 export interface UnmanagedPort {

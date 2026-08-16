@@ -11,6 +11,7 @@ import { AddPortForm } from "@/components/AddPortForm";
 import { EditProjectForm } from "@/components/EditProjectForm";
 import * as cmd from "@/lib/commands";
 import type { KillEntry } from "@/lib/commands";
+import { describeKillOutcome, summarizeKillEntries } from "@/lib/killOutcome";
 import { useForwards } from "@/features/backends/useForwards";
 import type {
   BackendTarget,
@@ -139,58 +140,17 @@ export function ProjectDetail({
   };
 
   const reportSingleOutcome = (port: number, outcome: KillOutcome) => {
-    switch (outcome) {
-      case "terminated":
-        showSuccess(`Port ${port} stopped`);
-        break;
-      case "killed":
-        showSuccess(`Port ${port} force-killed (SIGKILL)`);
-        break;
-      case "not_active":
-        showSuccess(`Port ${port} was already free`);
-        break;
-      case "permission_denied":
-        showError(`Cannot stop port ${port}: permission denied (different user?)`);
-        break;
-      case "docker_stopped":
-        showSuccess(`Port ${port} container stopped (docker)`);
-        break;
-      case "docker_error":
-        showError(
-          `Cannot stop port ${port}: docker container not found or daemon unavailable`,
-        );
-        break;
-    }
+    const report = describeKillOutcome(port, outcome);
+    if (report.ok) showSuccess(report.message);
+    else showError(report.message);
   };
 
   const reportProjectOutcomes = (results: KillEntry[]) => {
-    if (results.length === 0) {
-      showSuccess("No active ports to stop");
-      return;
-    }
-    const denied = results.filter((e) => e.outcome === "permission_denied");
-    if (denied.length > 0) {
-      const ports = denied.map((e) => e.port).join(", ");
-      showError(`Permission denied for port${denied.length === 1 ? "" : "s"} ${ports}`);
-      return;
-    }
-    const dockerFailed = results.filter((e) => e.outcome === "docker_error");
-    if (dockerFailed.length > 0) {
-      const ports = dockerFailed.map((e) => e.port).join(", ");
-      showError(
-        `Docker stop failed for port${dockerFailed.length === 1 ? "" : "s"} ${ports}`,
-      );
-      return;
-    }
-    const killed = results.filter((e) => e.outcome === "killed").length;
-    const terminated = results.filter((e) => e.outcome === "terminated").length;
-    const dockerStopped = results.filter((e) => e.outcome === "docker_stopped").length;
-    const parts: string[] = [];
-    if (terminated > 0) parts.push(`${terminated} stopped`);
-    if (killed > 0) parts.push(`${killed} force-killed`);
-    if (dockerStopped > 0)
-      parts.push(`${dockerStopped} container${dockerStopped === 1 ? "" : "s"} stopped`);
-    showSuccess(parts.length > 0 ? parts.join(", ") : "Done");
+    const { errors, success } = summarizeKillEntries(results);
+    // Failures are reported one line per kind: a partially successful kill
+    // must not hide the ports that stayed up behind a green toast.
+    errors.forEach((message) => showError(message));
+    if (success) showSuccess(success);
   };
 
   return (

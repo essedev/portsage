@@ -42,6 +42,31 @@ const DOCKER_PROXY_PROCESSES: &[&str] = &[
     "docker-proxy",
 ];
 
+/// Absolute locations to probe for the docker CLI when `PATH` does not
+/// resolve it. This is not belt-and-braces: a macOS app bundle launched by
+/// launchd (Finder, login item, tray) inherits `PATH=/usr/bin:/bin:/usr/sbin:/sbin`
+/// because `launchctl getenv PATH` is unset on a stock system, and none of
+/// those four directories holds a docker binary. Without this list every
+/// container-port kill issued from the UI fails while the same kill from a
+/// terminal succeeds, which is exactly the bug this list fixes.
+const DOCKER_BIN_CANDIDATES: &[&str] = &[
+    // Docker Desktop's symlink on macOS, and the usual spot on Linux.
+    "/usr/local/bin/docker",
+    // Homebrew on Apple Silicon (colima / docker-cli formula).
+    "/opt/homebrew/bin/docker",
+    // Docker Desktop's real binary, in case the symlink was never created.
+    "/Applications/Docker.app/Contents/Resources/bin/docker",
+    // OrbStack.
+    "/Applications/OrbStack.app/Contents/MacOS/xbin/docker",
+    // Distro packages.
+    "/usr/bin/docker",
+    "/snap/bin/docker",
+];
+
+/// Env var to point Portsage at a specific docker CLI, for setups the
+/// candidate list cannot guess (podman shim, custom prefix).
+const DOCKER_BIN_ENV: &str = "PORTSAGE_DOCKER_BIN";
+
 pub fn enrich_with_status(
     projects: Vec<ProjectWithPorts>,
     active_ports: &[ActivePort],
@@ -262,14 +287,83 @@ pub fn parse_docker_ps_ids(stdout: &str) -> Vec<String> {
         .collect()
 }
 
+/// True when a path exists and carries at least one executable bit.
+fn is_executable(path: &std::path::Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path)
+            .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
+    }
+    #[cfg(not(unix))]
+    {
+        path.is_file()
+    }
+}
+
+/// Look `name` up in a `PATH`-shaped string. Takes the variable as an argument
+/// rather than reading the environment so tests can drive it without mutating
+/// process-global state.
+fn find_in_path_var(path_var: &str, name: &str) -> Option<std::path::PathBuf> {
+    path_var
+        .split(':')
+        .filter(|dir| !dir.is_empty())
+        .map(|dir| std::path::Path::new(dir).join(name))
+        .find(|candidate| is_executable(candidate))
+}
+
+/// Locate the docker CLI: explicit override, then `PATH`, then the known
+/// install locations. Deliberately uncached - the app lives in the tray for
+/// days and Docker Desktop may well be installed after launch, so a cached
+/// `None` would keep failing until the next restart. The cost is a handful of
+/// `stat` calls on a path that runs once per kill.
+fn resolve_docker_bin() -> Option<std::path::PathBuf> {
+    if let Some(explicit) = std::env::var_os(DOCKER_BIN_ENV) {
+        let p = std::path::PathBuf::from(explicit);
+        if is_executable(&p) {
+            return Some(p);
+        }
+    }
+    if let Some(path_var) = std::env::var_os("PATH") {
+        if let Some(found) = find_in_path_var(&path_var.to_string_lossy(), "docker") {
+            return Some(found);
+        }
+    }
+    // Docker Desktop can also install per-user, outside any system prefix.
+    let home_candidate = std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .map(|h| h.join(".docker/bin/docker"));
+    DOCKER_BIN_CANDIDATES
+        .iter()
+        .map(std::path::PathBuf::from)
+        .chain(home_candidate)
+        .find(|c| is_executable(c))
+}
+
+/// True when a failed `docker ps` failed because the daemon is not reachable,
+/// as opposed to a malformed invocation. Docker changed the wording (the
+/// classic "Cannot connect to the Docker daemon" became "failed to connect to
+/// the docker API" in newer CLIs), so both are matched.
+fn is_daemon_unreachable(stderr: &str) -> bool {
+    let s = stderr.to_lowercase();
+    s.contains("cannot connect to the docker daemon")
+        || s.contains("failed to connect to the docker api")
+        || s.contains("is the docker daemon running")
+}
+
 /// Resolve the host `port` to the container(s) publishing it and call
-/// `docker stop` on each. Returns `DockerStopped` on success, `DockerError`
-/// when docker is unavailable, no container matches the port, or the stop
-/// command failed. `docker stop --time` handles its own SIGTERM->SIGKILL
-/// escalation so we don't replicate `kill_pid_with_escalation` here.
+/// `docker stop` on each. The failure modes are kept apart because they need
+/// different things from the user: install or point at a CLI, start Docker,
+/// or look at why no container claims that port. `docker stop --time` handles
+/// its own SIGTERM->SIGKILL escalation so we don't replicate
+/// `kill_pid_with_escalation` here.
 async fn stop_docker_container_for_port(port: i64) -> KillOutcome {
+    let Some(docker) = resolve_docker_bin() else {
+        return KillOutcome::DockerCliMissing;
+    };
     let filter = format!("publish={}", port);
-    let ps = std::process::Command::new("docker")
+    let ps = std::process::Command::new(&docker)
         .args([
             "ps",
             "--filter",
@@ -281,15 +375,25 @@ async fn stop_docker_container_for_port(port: i64) -> KillOutcome {
         .output();
     let ids = match ps {
         Ok(o) if o.status.success() => parse_docker_ps_ids(&String::from_utf8_lossy(&o.stdout)),
-        _ => return KillOutcome::DockerError,
+        Ok(o) => {
+            let stderr = String::from_utf8_lossy(&o.stderr);
+            return if is_daemon_unreachable(&stderr) {
+                KillOutcome::DockerDaemonDown
+            } else {
+                KillOutcome::DockerError
+            };
+        }
+        // The binary resolved a moment ago, so a spawn failure here is a
+        // vanished or unreadable file rather than a missing install.
+        Err(_) => return KillOutcome::DockerError,
     };
     if ids.is_empty() {
-        return KillOutcome::DockerError;
+        return KillOutcome::DockerNoContainer;
     }
     let timeout = KILL_GRACE.as_secs().to_string();
     let mut any_ok = false;
     for id in ids {
-        let stop = std::process::Command::new("docker")
+        let stop = std::process::Command::new(&docker)
             .args(["stop", "--time", &timeout, &id])
             .output();
         if matches!(stop, Ok(o) if o.status.success()) {
@@ -567,6 +671,67 @@ mod tests {
         assert!(parse_docker_ps_ids("\n\n   \n").is_empty());
     }
 
+    // --- docker CLI resolution ---
+
+    /// Write an executable stub at `dir/name` and return its path.
+    fn write_stub(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join(name);
+        std::fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    fn temp_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("portsage-test-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn find_in_path_var_returns_first_executable_hit() {
+        let first = temp_dir("path-first");
+        let second = temp_dir("path-second");
+        let expected = write_stub(&first, "docker");
+        write_stub(&second, "docker");
+        let path_var = format!("{}:{}", first.display(), second.display());
+        assert_eq!(find_in_path_var(&path_var, "docker"), Some(expected));
+    }
+
+    #[test]
+    fn find_in_path_var_skips_non_executable_and_missing_entries() {
+        let dir = temp_dir("path-noexec");
+        // A plain file with no executable bit must not be picked up: this is
+        // what a stray `docker` config file or a wrapper without +x looks like.
+        let plain = dir.join("docker");
+        std::fs::write(&plain, "not a binary").unwrap();
+        let path_var = format!("/nonexistent-dir-portsage::{}", dir.display());
+        assert_eq!(find_in_path_var(&path_var, "docker"), None);
+    }
+
+    #[test]
+    fn is_daemon_unreachable_matches_both_cli_wordings() {
+        // Classic wording, still emitted by older CLIs.
+        assert!(is_daemon_unreachable(
+            "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. \
+             Is the docker daemon running?"
+        ));
+        // Wording emitted by current Docker Desktop CLIs.
+        assert!(is_daemon_unreachable(
+            "failed to connect to the docker API at unix:///tmp/nope.sock; \
+             check if the path is correct and if the daemon is running"
+        ));
+    }
+
+    #[test]
+    fn is_daemon_unreachable_rejects_other_failures() {
+        assert!(!is_daemon_unreachable(
+            "Error response from daemon: No such container: abc123"
+        ));
+        assert!(!is_daemon_unreachable("unknown flag: --publish"));
+        assert!(!is_daemon_unreachable(""));
+    }
+
     // --- remove_port_by_service ---
 
     #[test]
@@ -603,8 +768,7 @@ mod tests {
         let db = Database::in_memory().unwrap();
         let p = db.create_project("omnia", Some("/old")).unwrap();
         db.add_port(p.id, "vite", p.range_start).unwrap();
-        let updated =
-            update_project(&db, "omnia", Some("omnia-ddt"), Some("/new")).unwrap();
+        let updated = update_project(&db, "omnia", Some("omnia-ddt"), Some("/new")).unwrap();
         assert_eq!(updated.id, p.id);
         assert_eq!(updated.name, "omnia-ddt");
         assert_eq!(updated.path.as_deref(), Some("/new"));

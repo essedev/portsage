@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Killing a Docker-published port from the app now works. A macOS app bundle launched by launchd (Finder, login item, tray) inherits `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, which holds no docker binary, so every container kill issued from the UI failed while the same kill from a terminal succeeded. `actions::resolve_docker_bin` now tries `PORTSAGE_DOCKER_BIN`, then `PATH`, then the known install locations (Docker Desktop, Homebrew, OrbStack, distro packages, `~/.docker/bin`)
+
+### Changed
+- `KillOutcome` splits the former catch-all `docker_error` into `docker_cli_missing`, `docker_daemon_down`, `docker_no_container` and `docker_error`, so the message says which of the four happened. Wire-protocol change: a CLI older than this release cannot deserialize the new variants, so upgrade the CLI and the app together
+- Kill messages moved into `src/lib/killOutcome.ts`, shared by `ProjectDetail` and `UnmanagedPortsPanel` instead of being duplicated in both. A partially failed `kill_project` now reports every failing group instead of the first one only
+
 ## [0.13.0] - 2026-06-17
 
 ### Added
