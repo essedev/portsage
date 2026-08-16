@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-08-16
+
 ### Fixed
 - All four tables (project ports, unmanaged ports, trash, prune) now come from one `UITable`. They were four hand-written sets of flex rows whose column widths were duplicated between the header and the body, with a comment in `ProjectDetail` asking the next reader to keep the two copies in sync by hand. `UITable` is a real `<table class="table-fixed">` with a `<colgroup>`, so a width is declared once
 - The trash view had a Settings-sized heading and no page padding: it was written as a Settings section and promoted to a view without being reworked. The heading of every main view now comes from a shared `UIPageHeader`, and the trash table uses the same column widths as the unmanaged-ports one
