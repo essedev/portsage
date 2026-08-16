@@ -3,7 +3,7 @@ pub mod mcp;
 pub mod output;
 pub mod self_update;
 
-use crate::cli::{Cli, Command, ConfigAction, GlobalOpts, McpAction};
+use crate::cli::{Cli, Command, ConfigAction, GlobalOpts, McpAction, TrashAction};
 use crate::output::OutputMode;
 use portsage_client::{AutoSpawn, Client, ClientError, PortStatus};
 use std::io::IsTerminal;
@@ -14,6 +14,8 @@ pub enum CliError {
     Client(ClientError),
     NoProjectAtCwd(PathBuf),
     NoTargetSpecified(&'static str),
+    /// Wrong argument combination that clap cannot express on its own.
+    Usage(String),
     AbortedByUser,
     ServiceNotInProject(String, String),
     UnknownBackend(String),
@@ -63,6 +65,7 @@ impl CliError {
             CliError::ServiceNotInProject(_, _) => 4,
             CliError::UnknownBackend(_) => 4,
             CliError::NoTargetSpecified(_) => 2,
+            CliError::Usage(_) => 2,
             CliError::AbortedByUser => 1,
             CliError::Io(_) => 1,
             CliError::Mcp(_) => 1,
@@ -88,6 +91,7 @@ impl CliError {
             CliError::NoTargetSpecified(what) => {
                 format!("must specify {what} or pass --here")
             }
+            CliError::Usage(msg) => msg.clone(),
             CliError::AbortedByUser => "aborted".into(),
             CliError::Io(e) => format!("io: {e}"),
             CliError::Mcp(e) => e.to_string(),
@@ -104,6 +108,10 @@ pub fn server_error_code(msg: &str) -> u8 {
         || lower.contains("unique")
         || lower.contains("constraint")
         || lower.contains("duplicate")
+        // Trash restores collide on a name, a port, or a range rather than on
+        // a SQLite constraint, but they are the same class of failure.
+        || lower.contains("already")
+        || lower.contains("overlaps")
     {
         5
     } else {
@@ -407,6 +415,53 @@ fn cmd_config(client: &Client, mode: OutputMode, action: ConfigAction) -> Result
             output::print_message(mode, &format!("set {key} = {value}"))?;
             Ok(())
         }
+    }
+}
+
+fn cmd_trash(
+    client: &Client,
+    mode: OutputMode,
+    action: TrashAction,
+    yes: bool,
+) -> Result<(), CliError> {
+    match action {
+        TrashAction::List => {
+            let entries = client.list_trash()?;
+            output::print_trash(mode, &entries)?;
+            Ok(())
+        }
+        TrashAction::Restore { id } => {
+            let outcome = client.restore_trash(id)?;
+            output::print_restore_outcome(mode, &outcome)?;
+            Ok(())
+        }
+        // Purging is the one trash operation that loses data, so it takes the
+        // same confirmation treatment as `release` and `kill`.
+        TrashAction::Purge { id, all } => match (id, all) {
+            (_, true) => {
+                confirm("permanently empty the trash?", yes)?;
+                let n = client.purge_trash(None)?;
+                output::print_message(mode, &format!("purged {n} entr{}", plural_y(n)))?;
+                Ok(())
+            }
+            (Some(id), false) => {
+                confirm(&format!("permanently drop trash entry {id}?"), yes)?;
+                client.purge_trash(Some(id))?;
+                output::print_message(mode, &format!("purged entry {id}"))?;
+                Ok(())
+            }
+            (None, false) => Err(CliError::Usage(
+                "pass an entry id or --all (see `portsage trash list`)".into(),
+            )),
+        },
+    }
+}
+
+fn plural_y(n: usize) -> &'static str {
+    if n == 1 {
+        "y"
+    } else {
+        "ies"
     }
 }
 
@@ -747,6 +802,7 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
             here,
         } => cmd_open(&client, mode, target, project, here),
         Command::Config { action } => cmd_config(&client, mode, action),
+        Command::Trash { action } => cmd_trash(&client, mode, action, yes),
         Command::Doctor => cmd_doctor(&cli.global, mode),
         // Handled above before the client is built. Unreachable in practice.
         Command::Mcp { .. } | Command::SelfUpdate { .. } => unreachable!(),
@@ -774,6 +830,17 @@ mod tests {
             5
         );
         assert_eq!(server_error_code("duplicate value"), 5);
+        // Restore conflicts are conflicts too, even though the backend words
+        // them without the SQLite vocabulary.
+        assert_eq!(
+            server_error_code("a project named 'demo' already exists"),
+            5
+        );
+        assert_eq!(server_error_code("port 4002 is already registered"), 5);
+        assert_eq!(
+            server_error_code("range 4060-4069 now overlaps project 'x'"),
+            5
+        );
     }
 
     #[test]

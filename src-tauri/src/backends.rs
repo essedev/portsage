@@ -29,7 +29,7 @@ use crate::db::{Database, RemoteBackend, RemoteBackendInput};
 use crate::paths;
 use portsage_client::{
     ActivePort, Client, ConfigSnapshot, KillEntry, KillOutcome, PortStatus, ProjectStatus,
-    RangeBounds,
+    RangeBounds, RestoreOutcome, TrashEntry,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -536,6 +536,30 @@ impl BackendClient {
                     .map_err(|e| e.to_string())
             }
             BackendClient::Remote(c) => c.release_project(name).map_err(|e| e.to_string()),
+        }
+    }
+
+    pub fn list_trash(&self) -> Result<Vec<TrashEntry>, String> {
+        match self {
+            BackendClient::Local(db) => actions::list_trash(db),
+            BackendClient::Remote(c) => c.list_trash().map_err(|e| e.to_string()),
+        }
+    }
+
+    pub fn restore_trash(&self, id: i64) -> Result<RestoreOutcome, String> {
+        match self {
+            BackendClient::Local(db) => actions::restore_trash(db, id),
+            BackendClient::Remote(c) => c.restore_trash(id).map_err(|e| e.to_string()),
+        }
+    }
+
+    pub fn purge_trash(&self, id: Option<i64>) -> Result<usize, String> {
+        match self {
+            BackendClient::Local(db) => match id {
+                Some(id) => actions::purge_trash(db, id).map(|()| 1),
+                None => actions::purge_trash_all(db),
+            },
+            BackendClient::Remote(c) => c.purge_trash(id).map_err(|e| e.to_string()),
         }
     }
 

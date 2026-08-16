@@ -112,7 +112,9 @@ scripts/
 - Database shared via Arc<Database> between Tauri state, the socket server, and the headless runtime
 - Tauri code is feature-gated behind the `gui` feature (default). The Linux server build runs with `--no-default-features` and drops the entire Tauri toolchain
 - Typed errors, no unwrap() in production
-- Wire types (PortStatus, ProjectStatus, ActivePort, KillOutcome, KillEntry, RangeBounds, ConfigSnapshot) are defined in `crates/portsage-client/src/types.rs` and re-exported from actions.rs and scanner.rs - never duplicate them
+- Wire types (PortStatus, ProjectStatus, ActivePort, KillOutcome, KillEntry, RangeBounds, ConfigSnapshot, TrashEntry, RestoreOutcome) are defined in `crates/portsage-client/src/types.rs` and re-exported from actions.rs and scanner.rs - never duplicate them
+- Deletions are hard, but `delete_project` / `remove_port` archive a JSON snapshot into the `trash` table in the same transaction. Adding a field to `projects` / `ports` means updating `db.rs::TrashPayload` and bumping `TRASH_PAYLOAD_VERSION`. The global "always soft delete" rule does not apply here and DATABASE_SCHEMA.md says why
+- Shelling out to a tool the user installed (docker, ssh, ...) must resolve the binary explicitly: an app bundle launched by launchd only has `PATH=/usr/bin:/bin:/usr/sbin:/sbin`. See `actions::resolve_docker_bin`
 
 ### MCP server
 - Thin client: no direct DB access

@@ -21,7 +21,7 @@ use std::collections::HashSet;
 
 // Wire types live in portsage-client so the CLI and the app speak the same
 // language without drift. Re-exported here for the Tauri command layer.
-pub use portsage_client::{KillOutcome, PortStatus, ProjectStatus};
+pub use portsage_client::{KillOutcome, PortStatus, ProjectStatus, RestoreOutcome, TrashEntry};
 
 /// 2 seconds is the empirical sweet spot: enough for Postgres-class daemons
 /// to flush and exit cleanly, short enough that the UI doesn't feel stuck.
@@ -184,6 +184,22 @@ pub fn update_project(
         .into_iter()
         .find(|p| p.id == updated.id)
         .ok_or_else(|| "project not found after update".to_string())
+}
+
+pub fn list_trash(db: &Database) -> Result<Vec<TrashEntry>, String> {
+    db.list_trash().map_err(|e| e.to_string())
+}
+
+pub fn restore_trash(db: &Database, id: i64) -> Result<RestoreOutcome, String> {
+    db.restore_trash(id).map_err(|e| e.to_string())
+}
+
+pub fn purge_trash(db: &Database, id: i64) -> Result<(), String> {
+    db.purge_trash(id).map_err(|e| e.to_string())
+}
+
+pub fn purge_trash_all(db: &Database) -> Result<usize, String> {
+    db.purge_trash_all().map_err(|e| e.to_string())
 }
 
 /// Find the project whose `path` equals `query_path` or is an ancestor of it.

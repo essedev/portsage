@@ -20,6 +20,29 @@ export type KillOutcome =
   | "docker_no_container"
   | "docker_error";
 
+/** Mirrors the Rust `TrashKind`. */
+export type TrashKind = "project" | "port";
+
+/**
+ * One archived deletion. `label` and `detail` are rendered by the backend so
+ * the UI does not have to know the snapshot's shape.
+ */
+export interface TrashEntry {
+  id: number;
+  kind: TrashKind;
+  label: string;
+  detail: string;
+  deleted_at: string;
+}
+
+/** Result of restoring a trash entry. */
+export interface RestoreOutcome {
+  kind: TrashKind;
+  project: string;
+  restored_ports: number[];
+  skipped_ports: number[];
+}
+
 export interface UnmanagedPort {
   port: number;
   process: string;

@@ -1,6 +1,6 @@
 use crate::types::{
     ActivePort, ConfigSnapshot, KillEntry, KillOutcome, PortStatus, ProjectStatus, RangeBounds,
-    RemoteBackend,
+    RemoteBackend, RestoreOutcome, TrashEntry,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
@@ -247,6 +247,35 @@ impl Client {
             "method": "kill_project",
             "params": { "name": name },
         }))
+    }
+
+    pub fn list_trash(&self) -> Result<Vec<TrashEntry>, ClientError> {
+        self.call(json!({ "method": "list_trash" }))
+    }
+
+    pub fn restore_trash(&self, id: i64) -> Result<RestoreOutcome, ClientError> {
+        self.call(json!({
+            "method": "restore_trash",
+            "params": { "id": id },
+        }))
+    }
+
+    /// Purge one entry, or every entry when `id` is `None`. Returns how many
+    /// entries were dropped.
+    pub fn purge_trash(&self, id: Option<i64>) -> Result<usize, ClientError> {
+        #[derive(serde::Deserialize)]
+        struct Wrapper {
+            purged: usize,
+        }
+        let params = match id {
+            Some(id) => json!({ "id": id }),
+            None => json!({ "all": true }),
+        };
+        let wrapper: Wrapper = self.call(json!({
+            "method": "purge_trash",
+            "params": params,
+        }))?;
+        Ok(wrapper.purged)
     }
 
     pub fn open_in_browser(&self, port: i64) -> Result<(), ClientError> {

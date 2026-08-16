@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Trash: releasing a project or removing a port now archives it for 30 days instead of dropping it. Restoring a project brings back its original range, path and ports, which is what makes the .env and compose files that point at those ports keep working. Surfaces: Settings > Data > Trash in the app, `portsage trash list|restore|purge [--all]` on the CLI, and the `list_trash` / `restore_trash` MCP tools (an agent can undo its own mistaken `release_project` but cannot purge). New `trash` table (see DATABASE_SCHEMA.md for the payload shape and why this is a snapshot archive rather than a `deleted_at` column) plus the `list_trash` / `restore_trash` / `purge_trash` socket methods
+
 ### Fixed
 - Killing a Docker-published port from the app now works. A macOS app bundle launched by launchd (Finder, login item, tray) inherits `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, which holds no docker binary, so every container kill issued from the UI failed while the same kill from a terminal succeeded. `actions::resolve_docker_bin` now tries `PORTSAGE_DOCKER_BIN`, then `PATH`, then the known install locations (Docker Desktop, Homebrew, OrbStack, distro packages, `~/.docker/bin`)
 
 ### Changed
 - `KillOutcome` splits the former catch-all `docker_error` into `docker_cli_missing`, `docker_daemon_down`, `docker_no_container` and `docker_error`, so the message says which of the four happened. Wire-protocol change: a CLI older than this release cannot deserialize the new variants, so upgrade the CLI and the app together
+- CLI exit code 5 (conflict) now also covers restore conflicts worded without the SQLite vocabulary (`already exists`, `already registered`, `overlaps`)
 - Kill messages moved into `src/lib/killOutcome.ts`, shared by `ProjectDetail` and `UnmanagedPortsPanel` instead of being duplicated in both. A partially failed `kill_project` now reports every failing group instead of the first one only
 
 ## [0.13.0] - 2026-06-17

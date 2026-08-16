@@ -177,10 +177,36 @@ def remove_port(project_name: str, service: str) -> str:
 def release_project(project_name: str) -> str:
     """Release a project's port range, freeing all its ports.
 
+    The project and its ports are archived in the trash for 30 days, so a
+    mistaken release can be undone with restore_trash.
+
     Args:
         project_name: Name of the project to release
     """
     return json.dumps(_send("release_project", {"name": project_name}), indent=2)
+
+
+@mcp.tool()
+def list_trash() -> str:
+    """List deleted projects and ports that can still be restored.
+
+    Entries are kept for 30 days. Each one carries the id to pass to
+    restore_trash, what was deleted, and when."""
+    return json.dumps(_send("list_trash"), indent=2)
+
+
+@mcp.tool()
+def restore_trash(entry_id: int) -> str:
+    """Restore a deleted project (with its ports) or a single port.
+
+    A project comes back with its original range, so the .env and compose
+    files that reference those ports keep working. Ports registered to
+    another project in the meantime are reported as skipped.
+
+    Args:
+        entry_id: Id of the entry, from list_trash
+    """
+    return json.dumps(_send("restore_trash", {"id": entry_id}), indent=2)
 
 
 @mcp.tool()

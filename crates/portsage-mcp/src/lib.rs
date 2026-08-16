@@ -38,6 +38,8 @@ pub const MCP_TOOL_PERMISSIONS: &[&str] = &[
     "mcp__portsage__kill_project",
     "mcp__portsage__open_in_browser",
     "mcp__portsage__find_project_by_path",
+    "mcp__portsage__list_trash",
+    "mcp__portsage__restore_trash",
 ];
 
 #[derive(Debug, thiserror::Error)]

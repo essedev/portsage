@@ -348,6 +348,40 @@ pub(crate) async fn handle_request(db: &Database, line: &str) -> Value {
             }
         }
 
+        "list_trash" => match actions::list_trash(db) {
+            Ok(entries) => json!({ "result": entries }),
+            Err(e) => json!({ "error": e }),
+        },
+
+        "restore_trash" => {
+            let id = match params["id"].as_i64() {
+                Some(i) => i,
+                None => return json!({"error": "missing params.id"}),
+            };
+            match actions::restore_trash(db, id) {
+                Ok(outcome) => json!({ "result": outcome }),
+                Err(e) => json!({ "error": e }),
+            }
+        }
+
+        // `all: true` empties the trash; otherwise `id` names one entry.
+        "purge_trash" => {
+            if params["all"].as_bool().unwrap_or(false) {
+                return match actions::purge_trash_all(db) {
+                    Ok(n) => json!({ "result": { "purged": n } }),
+                    Err(e) => json!({ "error": e }),
+                };
+            }
+            let id = match params["id"].as_i64() {
+                Some(i) => i,
+                None => return json!({"error": "missing params.id"}),
+            };
+            match actions::purge_trash(db, id) {
+                Ok(()) => json!({ "result": { "purged": 1 } }),
+                Err(e) => json!({ "error": e }),
+            }
+        }
+
         "get_remote_backend" => {
             let name = match params["name"].as_str() {
                 Some(n) => n,
@@ -1026,6 +1060,36 @@ mod tests {
                 .map_err(|e| format!("release_project: {e}"))?;
             let after = client.list_all().map_err(|e| format!("list_all: {e}"))?;
             assert!(after.is_empty());
+
+            // 9. the release is archived, and restoring it brings the project
+            // back with its range and port.
+            let trash = client
+                .list_trash()
+                .map_err(|e| format!("list_trash: {e}"))?;
+            assert_eq!(trash.len(), 1, "release should archive one entry");
+            assert_eq!(trash[0].label, "alpha2");
+            let restored = client
+                .restore_trash(trash[0].id)
+                .map_err(|e| format!("restore_trash: {e}"))?;
+            assert_eq!(restored.project, "alpha2");
+            assert_eq!(restored.restored_ports, vec![4000]);
+            let back = client.list_all().map_err(|e| format!("list_all: {e}"))?;
+            assert_eq!(back.len(), 1);
+            assert_eq!(back[0].range_start, 4000);
+            assert_eq!(back[0].ports.len(), 1);
+
+            // 10. purge empties the archive.
+            client
+                .release_project("alpha2")
+                .map_err(|e| format!("release_project: {e}"))?;
+            let purged = client
+                .purge_trash(None)
+                .map_err(|e| format!("purge_trash: {e}"))?;
+            assert_eq!(purged, 1);
+            assert!(client
+                .list_trash()
+                .map_err(|e| format!("list_trash: {e}"))?
+                .is_empty());
 
             Ok(())
         })

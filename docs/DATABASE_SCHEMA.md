@@ -42,7 +42,7 @@ CREATE TABLE ports (
 );
 ```
 
-Each row is one `(project, service, port)` triple. `port` is globally unique. The `project_id` FK is informational - cleanup on project deletion is performed in code (`Database::delete_project` deletes rows from `ports` first, then from `projects`).
+Each row is one `(project, service, port)` triple. `port` is globally unique. The `project_id` FK is informational - cleanup on project deletion is performed in code (`Database::delete_project` deletes rows from `ports` first, then from `projects`). Both deletion paths archive what they remove in `trash` first, inside the same transaction.
 
 ### `config`
 
@@ -95,12 +95,47 @@ CREATE TABLE forward_exclusions (
 
 Per-backend blocklist of ports the user does not want auto-forwarded (e.g. a port already in use locally by an unrelated process). Cascade on backend deletion is performed in code (`Database::delete_remote_backend` deletes exclusions first); the FK stays informational so error reporting matches the rest of the CRUD path. Regression test: `db.rs::delete_remote_backend_cascades_forward_exclusions`.
 
+### `trash`
+
+```sql
+CREATE TABLE trash (
+    id              INTEGER PRIMARY KEY,
+    kind            TEXT NOT NULL,              -- 'project' | 'port'
+    label           TEXT NOT NULL,              -- 'liber' | 'mcpbelt / postgres'
+    detail          TEXT NOT NULL,              -- 'range 4060-4069, 6 ports' | 'port 4332'
+    payload         TEXT NOT NULL,              -- JSON snapshot, restored verbatim
+    payload_version INTEGER NOT NULL DEFAULT 1,
+    deleted_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+Archive of deleted projects and ports, so a mistaken `release` or `remove` can be undone. `Database::delete_project` and `Database::remove_port` write the snapshot and delete the live rows in one transaction, so the archive cannot be skipped by a caller or lost to a crash between the two writes.
+
+Why an archive rather than a `deleted_at` column on `projects` / `ports`:
+
+- `projects.name` and `ports.port` carry inline UNIQUE constraints. SQLite cannot drop the implicit indexes those create, so partial unique indexes (`WHERE deleted_at IS NULL`) would mean rebuilding both tables.
+- Every query in `db.rs` would need a `deleted_at IS NULL` filter, and a forgotten one is a silent bug.
+- A project plus its ports is a closed aggregate: no other table references either, and no query wants to see deleted rows.
+- Soft delete would not even simplify the restore. With a partial unique index a deleted port and a live one can coexist, so the restore would still have to resolve the conflict by hand.
+
+`payload` shapes (`payload_version = 1`), serialized from `db.rs::TrashPayload`:
+
+```json
+{"kind":"project","name":"liber","path":"/Users/x/liber","range_start":4060,
+ "range_end":4069,"created_at":"...","ports":[{"service":"vite","port":4060,"created_at":"..."}]}
+
+{"kind":"port","project_name":"liber","service":"postgres","port":4062,"created_at":"..."}
+```
+
+A restore rejects a name collision, an overlapping range, or a missing parent project; ports taken by a live project in the meantime are skipped and reported in `RestoreOutcome::skipped_ports`. Retention is `TRASH_RETENTION_DAYS` (30), enforced by `purge_trash_older_than` called from `Database::new` - on open, not from a command, so no caller can forget it.
+
 ## Invariants
 
 - **No overlapping ranges.** `compute_next_range` always uses `MAX(range_end) + 1` (or `base_port` for the empty case), and runs under the same lock as the insert.
 - **Globally unique port numbers** across projects (the UNIQUE constraint on `ports.port` is the safety net; the application layer also validates that the port falls inside the project's range).
 - **No hard delete cascades from SQL** - all cleanup happens in code so error messages stay consistent.
-- **No soft delete.** Portsage uses hard deletes for projects and ports; `created_at` is the only timestamp tracked.
+- **Hard delete plus an archive, not soft delete.** Projects and ports are deleted for real; the snapshot in `trash` is what makes the deletion reversible for 30 days. The reasoning is under the `trash` table above.
+- **Ranges are never recycled.** A deleted project's range stays free until `MAX(range_end)` moves past it, which is what makes restoring a project with its original range safe: the `.env` and compose files that reference those ports keep working.
 
 ## Migrations
 

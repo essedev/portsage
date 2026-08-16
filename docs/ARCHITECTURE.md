@@ -124,6 +124,9 @@ The Rust backend listens on a Unix domain socket (see the table above for the pa
 | `kill_project`         | `project` (string)                                                    | `[KillEntry]`        |
 | `open_in_browser`      | `port` (int)                                                          | `"ok"`               |
 | `find_project_by_path` | `path` (absolute string)                                              | `ProjectStatus` or `null` |
+| `list_trash`           | none                                                                  | `[TrashEntry]`       |
+| `restore_trash`        | `id` (int)                                                            | `RestoreOutcome`     |
+| `purge_trash`          | `id` (int) or `all` (bool)                                            | `{ purged: int }`    |
 
 Wire types (`crates/portsage-client/src/types.rs` is the source of truth):
 
@@ -135,6 +138,8 @@ Wire types (`crates/portsage-client/src/types.rs` is the source of truth):
 - `KillOutcome`: `"terminated" | "killed" | "not_active" | "permission_denied" | "docker_stopped" | "docker_cli_missing" | "docker_daemon_down" | "docker_no_container" | "docker_error"` (see [Killing a port](#killing-a-port))
 - `KillEntry`: `{ port, outcome: KillOutcome }`
 - `RemoteBackend`: `{ id, name, ssh_alias, remote_socket_path, local_socket_path, auto_forward_enabled, created_at }`
+- `TrashEntry`: `{ id, kind: "project" | "port", label, detail, deleted_at }` (`label`/`detail` are rendered server-side; the snapshot never leaves the backend)
+- `RestoreOutcome`: `{ kind, project, restored_ports, skipped_ports }`
 
 Errors that can be returned: `invalid json: ...`, `unknown method: ...`, `missing params.<field>`, `project '<name>' not found`, `port <n> is outside project range <a>-<b>`, `set_config: unsupported key '<k>'`, plus any SQLite constraint failure (e.g. duplicate project name, duplicate port). SSH-specific failures surface verbatim - the frontend's `humanizeError` maps the common ones.
 
@@ -173,6 +178,14 @@ Unmanaged ports are filtered to ports >= 3000, excluding well-known system proce
 Finding the docker CLI is its own problem: a macOS app bundle launched by launchd inherits `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, which contains no docker binary, while the same build launched from a terminal inherits the user's PATH and works. `actions::resolve_docker_bin` therefore tries `PORTSAGE_DOCKER_BIN`, then `PATH`, then a list of known install locations (Docker Desktop, Homebrew, OrbStack, distro packages, `~/.docker/bin`). It is deliberately uncached: the tray app runs for days and Docker may be installed after launch.
 
 The docker failure modes stay separate on the wire (`docker_cli_missing`, `docker_daemon_down`, `docker_no_container`, `docker_error`) because each asks something different of the user. The frontend renders them from `src/lib/killOutcome.ts`, keyed by a `Record<KillOutcome, ...>` so a new variant fails the typecheck rather than silently showing nothing.
+
+## Undoing a deletion
+
+`release` and `remove` archive what they delete into the `trash` table instead of dropping it, and `Database::new` purges entries older than 30 days on open. See [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) for the table, the payload shape, and why this is an archive rather than a `deleted_at` column.
+
+Surfaces: Settings > Data > Trash in the app, `portsage trash list|restore|purge` on the CLI, and the `list_trash` / `restore_trash` MCP tools (an agent can undo its own mistaken `release_project`, but cannot purge).
+
+A restored project comes back with its original range, which is the point: the range of a deleted project is never recycled, so the `.env` and compose files still pointing at those ports keep working.
 
 ## Stack
 

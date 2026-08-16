@@ -10,6 +10,8 @@ import type {
   TunnelStatus,
   ForwardStatus,
   ForwardExclusion,
+  TrashEntry,
+  RestoreOutcome,
 } from "./types";
 
 export function listProjects(): Promise<ProjectStatus[]> {
@@ -90,6 +92,19 @@ export interface KillEntry {
 
 export function killProject(projectName: string): Promise<KillEntry[]> {
   return invoke("kill_project", { projectName });
+}
+
+export function listTrash(): Promise<TrashEntry[]> {
+  return invoke("list_trash");
+}
+
+export function restoreTrash(id: number): Promise<RestoreOutcome> {
+  return invoke("restore_trash", { id });
+}
+
+/** Purge one entry, or the whole trash when `id` is omitted. */
+export function purgeTrash(id?: number): Promise<number> {
+  return invoke("purge_trash", { id: id ?? null });
 }
 
 export function getConfig(): Promise<{ base_port: string; range_size: string }> {

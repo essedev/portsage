@@ -1,5 +1,8 @@
 use anstyle::{AnsiColor, Color, Style};
-use portsage_client::{ActivePort, KillEntry, KillOutcome, PortStatus, ProjectStatus};
+use portsage_client::{
+    ActivePort, KillEntry, KillOutcome, PortStatus, ProjectStatus, RestoreOutcome, TrashEntry,
+    TrashKind,
+};
 use std::io::{self, Write};
 
 /// Output mode driven by the global `--json` / `--quiet` flags. The default
@@ -271,6 +274,108 @@ pub fn print_json<T: serde::Serialize>(value: T) -> io::Result<()> {
         .unwrap_or_else(|e| format!(r#"{{"error":"serialize failed: {e}"}}"#));
     writeln!(out, "{}", s)?;
     Ok(())
+}
+
+pub fn print_trash(mode: OutputMode, entries: &[TrashEntry]) -> io::Result<()> {
+    match mode {
+        OutputMode::Json => print_json(entries),
+        OutputMode::Quiet => {
+            let mut out = anstream::stdout().lock();
+            for e in entries {
+                writeln!(out, "{}\t{}\t{}", e.id, trash_kind_label(e.kind), e.label)?;
+            }
+            Ok(())
+        }
+        OutputMode::Human => {
+            let mut out = anstream::stdout().lock();
+            if entries.is_empty() {
+                writeln!(out, "(trash is empty)")?;
+                return Ok(());
+            }
+            let label_w = entries
+                .iter()
+                .map(|e| e.label.len())
+                .max()
+                .unwrap_or(4)
+                .max(4);
+            let b = bold();
+            writeln!(
+                out,
+                "{b}{:<4} {:<7} {:<label_w$}  {:<24}  DELETED{b:#}",
+                "ID",
+                "KIND",
+                "NAME",
+                "DETAIL",
+                label_w = label_w,
+            )?;
+            for e in entries {
+                writeln!(
+                    out,
+                    "{:<4} {:<7} {:<label_w$}  {:<24}  {}",
+                    e.id,
+                    trash_kind_label(e.kind),
+                    e.label,
+                    e.detail,
+                    e.deleted_at,
+                    label_w = label_w,
+                )?;
+            }
+            let d = dim();
+            writeln!(out, "{d}restore with `portsage trash restore <id>`{d:#}")?;
+            Ok(())
+        }
+    }
+}
+
+pub fn print_restore_outcome(mode: OutputMode, outcome: &RestoreOutcome) -> io::Result<()> {
+    match mode {
+        OutputMode::Json => print_json(outcome),
+        OutputMode::Quiet => {
+            let mut out = anstream::stdout().lock();
+            for port in &outcome.restored_ports {
+                writeln!(out, "{}\t{}", outcome.project, port)?;
+            }
+            Ok(())
+        }
+        OutputMode::Human => {
+            let mut out = anstream::stdout().lock();
+            let g = green();
+            writeln!(
+                out,
+                "{g}restored{g:#} {} ({} port{})",
+                outcome.project,
+                outcome.restored_ports.len(),
+                if outcome.restored_ports.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                },
+            )?;
+            // Skipped ports are the one thing a caller must not miss: the
+            // project is back but incomplete.
+            if !outcome.skipped_ports.is_empty() {
+                let y = yellow();
+                let ports: Vec<String> = outcome
+                    .skipped_ports
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect();
+                writeln!(
+                    out,
+                    "{y}skipped{y:#} {} (registered to another project since)",
+                    ports.join(", ")
+                )?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn trash_kind_label(kind: TrashKind) -> &'static str {
+    match kind {
+        TrashKind::Project => "project",
+        TrashKind::Port => "port",
+    }
 }
 
 fn outcome_label(outcome: KillOutcome) -> &'static str {

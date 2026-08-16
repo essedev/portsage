@@ -40,10 +40,23 @@ its UI: read state, mutate state, and act on live ports (kill / open).
 - **release_project(project_name)** - releases the whole range.
 - **set_config(key, value)** - only `base_port` and `range_size` are accepted.
 
+### Undo a deletion
+
+Deleted projects and ports are archived for 30 days, not dropped.
+
+- **list_trash()** - what can still be restored, with the id to restore it by.
+- **restore_trash(entry_id)** - puts a project back with its original range
+  (so existing .env / compose files keep working) or re-registers a single
+  port. Ports taken by another project in the meantime come back as
+  `skipped_ports`.
+
 ### Act on live ports
 
-- **kill_port(port)** - SIGTERM with 2s grace, then SIGKILL. Returns
-  {outcome: terminated | killed | not_active | permission_denied}.
+- **kill_port(port)** - SIGTERM with 2s grace, then SIGKILL. A port published
+  by a Docker container is resolved to that container and stopped with
+  `docker stop` instead. Returns {outcome: terminated | killed | not_active |
+  permission_denied | docker_stopped | docker_cli_missing | docker_daemon_down
+  | docker_no_container | docker_error}.
 - **kill_project(project_name)** - kills every active port for a project in
   parallel. Returns a list of {port, outcome}.
 - **open_in_browser(port)** - opens http://localhost:<port> in the default

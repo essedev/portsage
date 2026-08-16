@@ -109,6 +109,9 @@ function MainWindow() {
               onBackendsChanged={() => {
                 void refreshBackends();
               }}
+              onDataChanged={() => {
+                void refreshProjects();
+              }}
             />
           ) : activeView === "unmanaged" ? (
             <UnmanagedPortsPanel ports={unmanagedPorts} onKill={killPort} />

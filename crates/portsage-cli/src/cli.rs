@@ -161,6 +161,12 @@ pub enum Command {
         action: ConfigAction,
     },
 
+    /// Inspect and restore deleted projects and ports (kept 30 days).
+    Trash {
+        #[command(subcommand)]
+        action: TrashAction,
+    },
+
     /// Diagnose the local install: socket reachable, app located, etc.
     Doctor,
 
@@ -188,6 +194,22 @@ pub enum ConfigAction {
     Get,
     /// Set a config value.
     Set { key: String, value: String },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum TrashAction {
+    /// List what can still be restored, newest deletion first.
+    List,
+    /// Put an entry back, by the id shown in `trash list`.
+    Restore { id: i64 },
+    /// Drop an entry for good, or the whole trash with `--all`.
+    Purge {
+        /// Entry id. Omit when passing `--all`.
+        id: Option<i64>,
+        /// Empty the trash.
+        #[arg(long)]
+        all: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]

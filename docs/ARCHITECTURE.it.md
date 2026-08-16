@@ -107,6 +107,14 @@ Processo normale: SIGTERM, 2s di grazia, poi SIGKILL. Porta pubblicata da Docker
 
 Il punto non ovvio è trovare il CLI docker: un app bundle avviato da launchd eredita `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, dove docker non c'è, mentre lo stesso binario avviato da terminale eredita la PATH dell'utente e funziona. `actions::resolve_docker_bin` prova `PORTSAGE_DOCKER_BIN`, poi la `PATH`, poi le install location note. Dettaglio nella [versione inglese](ARCHITECTURE.md#killing-a-port).
 
+## Annullare una cancellazione
+
+`release` e `remove` archiviano quello che cancellano nella tabella `trash` invece di buttarlo; `Database::new` fa la purge di quello che ha più di 30 giorni all'apertura del database. La tabella, la forma del payload e il perché sia un archivio e non una colonna `deleted_at` stanno in [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md).
+
+Interfacce: Impostazioni > Data > Trash nell'app, `portsage trash list|restore|purge` da CLI, e i tool MCP `list_trash` / `restore_trash` (un agent può annullare il proprio `release_project` sbagliato, ma non può fare purge).
+
+Un progetto ripristinato torna col suo range originale, ed è il punto: il range di un progetto cancellato non viene mai riciclato, quindi i file `.env` e compose che puntano a quelle porte continuano a funzionare.
+
 ## Stack
 
 - **Frontend**: React 19 + TypeScript + Tailwind v4 (CSS-first via `@theme`).

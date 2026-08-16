@@ -61,6 +61,113 @@ pub struct ForwardExclusion {
     pub created_at: String,
 }
 
+// Trash wire types are shared with the CLI and the UI; the snapshot payload
+// below is internal to this module.
+pub use portsage_client::{RestoreOutcome, TrashEntry, TrashKind};
+
+/// How long a deleted project or port stays restorable. Purged on startup in
+/// `Database::new`, never from a command: the retention is an invariant of
+/// opening the database, not something a caller can forget to run.
+pub const TRASH_RETENTION_DAYS: i64 = 30;
+
+/// Current `trash.payload` shape. Bump when the JSON below changes so old
+/// rows can still be read instead of silently failing to restore.
+const TRASH_PAYLOAD_VERSION: i64 = 1;
+
+/// A port as archived inside a trash payload. Separate from `Port` because
+/// the live ids are gone by the time this is read back: only the values that
+/// survive a restore are stored.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct TrashedPort {
+    service: String,
+    port: i64,
+    created_at: String,
+}
+
+/// The JSON snapshot stored in `trash.payload`.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum TrashPayload {
+    Project {
+        name: String,
+        path: Option<String>,
+        range_start: i64,
+        range_end: i64,
+        created_at: String,
+        ports: Vec<TrashedPort>,
+    },
+    Port {
+        project_name: String,
+        service: String,
+        port: i64,
+        created_at: String,
+    },
+}
+
+fn trash_kind_str(kind: TrashKind) -> &'static str {
+    match kind {
+        TrashKind::Project => "project",
+        TrashKind::Port => "port",
+    }
+}
+
+/// Rows are only ever written by `trash_kind_str`, so an unknown string means
+/// a hand-edited database. Treating it as a port keeps `list_trash` readable
+/// instead of failing the whole listing; the restore will reject it anyway
+/// because the payload will not parse.
+fn parse_trash_kind(raw: &str) -> TrashKind {
+    match raw {
+        "project" => TrashKind::Project,
+        _ => TrashKind::Port,
+    }
+}
+
+fn insert_trash(
+    tx: &rusqlite::Transaction<'_>,
+    kind: TrashKind,
+    label: &str,
+    detail: &str,
+    payload: &TrashPayload,
+) -> Result<()> {
+    let json = serde_json::to_string(payload)
+        .map_err(|e| constraint_err(format!("could not archive deletion: {e}")))?;
+    tx.execute(
+        "INSERT INTO trash (kind, label, detail, payload, payload_version) \
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            trash_kind_str(kind),
+            label,
+            detail,
+            json,
+            TRASH_PAYLOAD_VERSION
+        ],
+    )?;
+    Ok(())
+}
+
+fn port_is_taken(tx: &rusqlite::Transaction<'_>, port: i64) -> Result<bool> {
+    let existing: Option<i64> = tx
+        .query_row("SELECT id FROM ports WHERE port = ?1", params![port], |r| {
+            r.get(0)
+        })
+        .optional()?;
+    Ok(existing.is_some())
+}
+
+fn constraint_err(msg: impl Into<String>) -> rusqlite::Error {
+    rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CONSTRAINT),
+        Some(msg.into()),
+    )
+}
+
+fn not_found_err(msg: impl Into<String>) -> rusqlite::Error {
+    rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_NOTFOUND),
+        Some(msg.into()),
+    )
+}
+
 pub struct Database {
     pub conn: Mutex<Connection>,
 }
@@ -76,6 +183,10 @@ impl Database {
             conn: Mutex::new(conn),
         };
         db.migrate()?;
+        // Retention runs on open rather than from a command, so no caller can
+        // forget it and no scheduler is needed for a desktop app that may be
+        // launched once a week.
+        db.purge_trash_older_than(TRASH_RETENTION_DAYS)?;
         Ok(db)
     }
 
@@ -176,6 +287,25 @@ impl Database {
                 port INTEGER NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(backend_id, port)
+            );
+
+            -- Archive of deleted projects and ports, so a mistaken `release`
+            -- or `remove` can be undone. Deliberately a snapshot archive and
+            -- not a `deleted_at` column on the live tables: `projects.name`
+            -- and `ports.port` carry inline UNIQUE constraints (dropping
+            -- them means rebuilding both tables), a project plus its ports is
+            -- a closed aggregate nothing else references, and no query wants
+            -- to see deleted rows. `payload` is a JSON snapshot restored
+            -- verbatim; `payload_version` exists so a future shape change can
+            -- be read rather than guessed.
+            CREATE TABLE IF NOT EXISTS trash (
+                id INTEGER PRIMARY KEY,
+                kind TEXT NOT NULL,
+                label TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                payload_version INTEGER NOT NULL DEFAULT 1,
+                deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
             );",
         )?;
         Ok(())
@@ -365,10 +495,68 @@ impl Database {
         )
     }
 
+    /// Delete a project and its ports, archiving both in the trash first.
+    /// Snapshot and delete share one transaction so the archive can never be
+    /// skipped by a caller or lost to a crash between the two writes.
     pub fn delete_project(&self, id: i64) -> Result<()> {
-        let conn = self.conn();
-        conn.execute("DELETE FROM ports WHERE project_id = ?1", params![id])?;
-        conn.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
+        let mut guard = self.conn();
+        let tx = guard.transaction()?;
+
+        let project: Option<(String, Option<String>, i64, i64, String)> = tx
+            .query_row(
+                "SELECT name, path, range_start, range_end, created_at \
+                 FROM projects WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .optional()?;
+        // Deleting an already-absent project stays a no-op, as before.
+        let Some((name, path, range_start, range_end, created_at)) = project else {
+            return Ok(());
+        };
+
+        let mut stmt = tx.prepare(
+            "SELECT service, port, created_at FROM ports WHERE project_id = ?1 ORDER BY port",
+        )?;
+        let ports: Vec<TrashedPort> = stmt
+            .query_map(params![id], |row| {
+                Ok(TrashedPort {
+                    service: row.get(0)?,
+                    port: row.get(1)?,
+                    created_at: row.get(2)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
+        drop(stmt);
+
+        let detail = format!(
+            "range {}-{}, {} port{}",
+            range_start,
+            range_end,
+            ports.len(),
+            if ports.len() == 1 { "" } else { "s" }
+        );
+        let payload = TrashPayload::Project {
+            name: name.clone(),
+            path,
+            range_start,
+            range_end,
+            created_at,
+            ports,
+        };
+        insert_trash(&tx, TrashKind::Project, &name, &detail, &payload)?;
+
+        tx.execute("DELETE FROM ports WHERE project_id = ?1", params![id])?;
+        tx.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -454,10 +642,228 @@ impl Database {
         )
     }
 
+    /// Remove a single port, archiving it in the trash first. Same
+    /// transaction as `delete_project` for the same reason.
     pub fn remove_port(&self, id: i64) -> Result<()> {
-        let conn = self.conn();
-        conn.execute("DELETE FROM ports WHERE id = ?1", params![id])?;
+        let mut guard = self.conn();
+        let tx = guard.transaction()?;
+
+        let row: Option<(String, String, i64, String)> = tx
+            .query_row(
+                "SELECT projects.name, ports.service, ports.port, ports.created_at \
+                 FROM ports JOIN projects ON projects.id = ports.project_id \
+                 WHERE ports.id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()?;
+        let Some((project_name, service, port, created_at)) = row else {
+            return Ok(());
+        };
+
+        let payload = TrashPayload::Port {
+            project_name: project_name.clone(),
+            service: service.clone(),
+            port,
+            created_at,
+        };
+        insert_trash(
+            &tx,
+            TrashKind::Port,
+            &format!("{project_name} / {service}"),
+            &format!("port {port}"),
+            &payload,
+        )?;
+
+        tx.execute("DELETE FROM ports WHERE id = ?1", params![id])?;
+        tx.commit()?;
         Ok(())
+    }
+
+    /// Entries in the trash, newest deletion first.
+    pub fn list_trash(&self) -> Result<Vec<TrashEntry>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT id, kind, label, detail, deleted_at FROM trash \
+             ORDER BY deleted_at DESC, id DESC",
+        )?;
+        let entries = stmt
+            .query_map([], |row| {
+                let kind: String = row.get(1)?;
+                Ok(TrashEntry {
+                    id: row.get(0)?,
+                    kind: parse_trash_kind(&kind),
+                    label: row.get(2)?,
+                    detail: row.get(3)?,
+                    deleted_at: row.get(4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
+        Ok(entries)
+    }
+
+    /// Put a trashed project or port back. The whole restore plus the removal
+    /// of the trash row is one transaction: a failed restore leaves the entry
+    /// in the trash so it can be retried.
+    ///
+    /// Blocking conflicts (a live project holding the same name, an
+    /// overlapping range, a missing parent project) are errors. A port taken
+    /// by someone else in the meantime is skipped instead, and reported.
+    pub fn restore_trash(&self, id: i64) -> Result<RestoreOutcome> {
+        let mut guard = self.conn();
+        let tx = guard.transaction()?;
+
+        let (payload_json, version): (String, i64) = tx
+            .query_row(
+                "SELECT payload, payload_version FROM trash WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?
+            .ok_or_else(|| not_found_err(format!("trash entry {id} not found")))?;
+        if version > TRASH_PAYLOAD_VERSION {
+            return Err(constraint_err(format!(
+                "trash entry {id} was written by a newer version of Portsage \
+                 (payload v{version}); upgrade before restoring"
+            )));
+        }
+        let payload: TrashPayload = serde_json::from_str(&payload_json)
+            .map_err(|e| constraint_err(format!("trash entry {id} is unreadable: {e}")))?;
+
+        let outcome = match payload {
+            TrashPayload::Project {
+                name,
+                path,
+                range_start,
+                range_end,
+                created_at,
+                ports,
+            } => {
+                let taken: Option<i64> = tx
+                    .query_row(
+                        "SELECT id FROM projects WHERE name = ?1",
+                        params![name],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                if taken.is_some() {
+                    return Err(constraint_err(format!(
+                        "a project named '{name}' already exists"
+                    )));
+                }
+                // Ranges are never recycled (`compute_next_range` walks
+                // forward from MAX(range_end)), so an overlap means the user
+                // moved the base port or edited the database by hand.
+                let overlap: Option<String> = tx
+                    .query_row(
+                        "SELECT name FROM projects \
+                         WHERE range_start <= ?2 AND range_end >= ?1 LIMIT 1",
+                        params![range_start, range_end],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                if let Some(other) = overlap {
+                    return Err(constraint_err(format!(
+                        "range {range_start}-{range_end} now overlaps project '{other}'"
+                    )));
+                }
+
+                tx.execute(
+                    "INSERT INTO projects (name, path, range_start, range_end, created_at) \
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![name, path, range_start, range_end, created_at],
+                )?;
+                let project_id = tx.last_insert_rowid();
+
+                let mut restored = Vec::new();
+                let mut skipped = Vec::new();
+                for p in ports {
+                    if port_is_taken(&tx, p.port)? {
+                        skipped.push(p.port);
+                        continue;
+                    }
+                    tx.execute(
+                        "INSERT INTO ports (project_id, service, port, created_at) \
+                         VALUES (?1, ?2, ?3, ?4)",
+                        params![project_id, p.service, p.port, p.created_at],
+                    )?;
+                    restored.push(p.port);
+                }
+                RestoreOutcome {
+                    kind: TrashKind::Project,
+                    project: name,
+                    restored_ports: restored,
+                    skipped_ports: skipped,
+                }
+            }
+            TrashPayload::Port {
+                project_name,
+                service,
+                port,
+                created_at,
+            } => {
+                let target: Option<(i64, i64, i64)> = tx
+                    .query_row(
+                        "SELECT id, range_start, range_end FROM projects WHERE name = ?1",
+                        params![project_name],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    )
+                    .optional()?;
+                let (project_id, range_start, range_end) = target.ok_or_else(|| {
+                    not_found_err(format!(
+                        "project '{project_name}' no longer exists; restore it first"
+                    ))
+                })?;
+                if port < range_start || port > range_end {
+                    return Err(constraint_err(format!(
+                        "port {port} is outside project range {range_start}-{range_end}"
+                    )));
+                }
+                if port_is_taken(&tx, port)? {
+                    return Err(constraint_err(format!("port {port} is already registered")));
+                }
+                tx.execute(
+                    "INSERT INTO ports (project_id, service, port, created_at) \
+                     VALUES (?1, ?2, ?3, ?4)",
+                    params![project_id, service, port, created_at],
+                )?;
+                RestoreOutcome {
+                    kind: TrashKind::Port,
+                    project: project_name,
+                    restored_ports: vec![port],
+                    skipped_ports: Vec::new(),
+                }
+            }
+        };
+
+        tx.execute("DELETE FROM trash WHERE id = ?1", params![id])?;
+        tx.commit()?;
+        Ok(outcome)
+    }
+
+    /// Drop one trash entry for good.
+    pub fn purge_trash(&self, id: i64) -> Result<()> {
+        let conn = self.conn();
+        let removed = conn.execute("DELETE FROM trash WHERE id = ?1", params![id])?;
+        if removed == 0 {
+            return Err(not_found_err(format!("trash entry {id} not found")));
+        }
+        Ok(())
+    }
+
+    /// Empty the trash. Returns how many entries were dropped.
+    pub fn purge_trash_all(&self) -> Result<usize> {
+        let conn = self.conn();
+        conn.execute("DELETE FROM trash", [])
+    }
+
+    /// Drop entries deleted more than `days` ago. Returns how many went.
+    pub fn purge_trash_older_than(&self, days: i64) -> Result<usize> {
+        let conn = self.conn();
+        conn.execute(
+            "DELETE FROM trash WHERE deleted_at < datetime('now', ?1)",
+            params![format!("-{days} days")],
+        )
     }
 
     /// Looked up from the socket dispatcher even in the headless server build
@@ -812,6 +1218,203 @@ mod tests {
         let projects = db.list_projects().unwrap();
         assert_eq!(projects[0].ports.len(), 1);
         assert_eq!(projects[0].ports[0].service, "api");
+    }
+
+    // --- trash ---
+
+    #[test]
+    fn deleting_a_project_archives_it_with_its_ports() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", Some("/tmp/alpha")).unwrap();
+        db.add_port(p.id, "vite", p.range_start).unwrap();
+        db.add_port(p.id, "api", p.range_start + 1).unwrap();
+        db.delete_project(p.id).unwrap();
+
+        let trash = db.list_trash().unwrap();
+        assert_eq!(trash.len(), 1);
+        assert_eq!(trash[0].kind, TrashKind::Project);
+        assert_eq!(trash[0].label, "alpha");
+        assert!(
+            trash[0].detail.contains("2 ports"),
+            "got: {}",
+            trash[0].detail
+        );
+    }
+
+    #[test]
+    fn restoring_a_project_brings_back_range_path_and_ports() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", Some("/tmp/alpha")).unwrap();
+        db.add_port(p.id, "vite", p.range_start).unwrap();
+        db.add_port(p.id, "api", p.range_start + 1).unwrap();
+        db.delete_project(p.id).unwrap();
+
+        let entry_id = db.list_trash().unwrap()[0].id;
+        let outcome = db.restore_trash(entry_id).unwrap();
+        assert_eq!(outcome.project, "alpha");
+        assert_eq!(
+            outcome.restored_ports,
+            vec![p.range_start, p.range_start + 1]
+        );
+        assert!(outcome.skipped_ports.is_empty());
+
+        let projects = db.list_projects().unwrap();
+        assert_eq!(projects.len(), 1);
+        // The range is what makes a restore useful: the project's .env files
+        // and compose files still point at those exact ports.
+        assert_eq!(projects[0].project.range_start, p.range_start);
+        assert_eq!(projects[0].project.range_end, p.range_end);
+        assert_eq!(projects[0].project.path, Some("/tmp/alpha".to_string()));
+        assert_eq!(projects[0].ports.len(), 2);
+        // A restored entry leaves the trash.
+        assert!(db.list_trash().unwrap().is_empty());
+    }
+
+    #[test]
+    fn restoring_a_project_skips_ports_taken_in_the_meantime() {
+        let db = fresh_db();
+        let a = db.create_project("alpha", None).unwrap();
+        db.add_port(a.id, "vite", a.range_start).unwrap();
+        db.add_port(a.id, "api", a.range_start + 1).unwrap();
+        db.delete_project(a.id).unwrap();
+
+        // Someone hand-registers one of the freed ports under another project
+        // whose range happens to cover it.
+        let b = db.create_project("bravo", None).unwrap();
+        db.conn()
+            .execute(
+                "UPDATE projects SET range_start = ?1, range_end = ?2 WHERE id = ?3",
+                params![a.range_start, b.range_end, b.id],
+            )
+            .unwrap();
+        db.add_port(b.id, "stolen", a.range_start).unwrap();
+
+        let entry_id = db.list_trash().unwrap()[0].id;
+        let err = db.restore_trash(entry_id).unwrap_err();
+        // bravo now overlaps alpha's range, so the restore is refused rather
+        // than silently landing a project on top of another one's range.
+        assert!(err.to_string().contains("overlaps"), "got: {err}");
+        // The entry survives a failed restore so it can be retried.
+        assert_eq!(db.list_trash().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn restoring_a_project_refuses_a_name_already_in_use() {
+        let db = fresh_db();
+        let a = db.create_project("alpha", None).unwrap();
+        db.delete_project(a.id).unwrap();
+        db.create_project("alpha", None).unwrap();
+
+        let entry_id = db.list_trash().unwrap()[0].id;
+        let err = db.restore_trash(entry_id).unwrap_err();
+        assert!(err.to_string().contains("already exists"), "got: {err}");
+    }
+
+    #[test]
+    fn removing_and_restoring_a_single_port_round_trips() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", None).unwrap();
+        let port = db.add_port(p.id, "postgres", p.range_start + 2).unwrap();
+        db.remove_port(port.id).unwrap();
+
+        let trash = db.list_trash().unwrap();
+        assert_eq!(trash.len(), 1);
+        assert_eq!(trash[0].kind, TrashKind::Port);
+        assert_eq!(trash[0].label, "alpha / postgres");
+
+        let outcome = db.restore_trash(trash[0].id).unwrap();
+        assert_eq!(outcome.restored_ports, vec![p.range_start + 2]);
+        let projects = db.list_projects().unwrap();
+        assert_eq!(projects[0].ports.len(), 1);
+        assert_eq!(projects[0].ports[0].service, "postgres");
+    }
+
+    #[test]
+    fn restoring_a_port_whose_project_is_gone_says_so() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", None).unwrap();
+        let port = db.add_port(p.id, "postgres", p.range_start).unwrap();
+        db.remove_port(port.id).unwrap();
+        let port_entry = db.list_trash().unwrap()[0].id;
+        db.delete_project(p.id).unwrap();
+
+        let err = db.restore_trash(port_entry).unwrap_err();
+        assert!(err.to_string().contains("no longer exists"), "got: {err}");
+    }
+
+    #[test]
+    fn restoring_a_port_refuses_when_the_port_is_registered_again() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", None).unwrap();
+        let port = db.add_port(p.id, "postgres", p.range_start).unwrap();
+        db.remove_port(port.id).unwrap();
+        db.add_port(p.id, "other", p.range_start).unwrap();
+
+        let entry_id = db.list_trash().unwrap()[0].id;
+        let err = db.restore_trash(entry_id).unwrap_err();
+        assert!(err.to_string().contains("already registered"), "got: {err}");
+    }
+
+    #[test]
+    fn purge_removes_one_entry_and_all_of_them() {
+        let db = fresh_db();
+        let a = db.create_project("alpha", None).unwrap();
+        let b = db.create_project("bravo", None).unwrap();
+        db.delete_project(a.id).unwrap();
+        db.delete_project(b.id).unwrap();
+        assert_eq!(db.list_trash().unwrap().len(), 2);
+
+        let first = db.list_trash().unwrap()[0].id;
+        db.purge_trash(first).unwrap();
+        assert_eq!(db.list_trash().unwrap().len(), 1);
+        assert_eq!(db.purge_trash_all().unwrap(), 1);
+        assert!(db.list_trash().unwrap().is_empty());
+    }
+
+    #[test]
+    fn purge_of_an_unknown_entry_errors() {
+        let db = fresh_db();
+        let err = db.purge_trash(999).unwrap_err();
+        assert!(err.to_string().contains("not found"), "got: {err}");
+    }
+
+    #[test]
+    fn retention_purge_drops_only_entries_past_the_window() {
+        let db = fresh_db();
+        let a = db.create_project("alpha", None).unwrap();
+        let b = db.create_project("bravo", None).unwrap();
+        db.delete_project(a.id).unwrap();
+        db.delete_project(b.id).unwrap();
+
+        let old = db.list_trash().unwrap()[0].id;
+        db.conn()
+            .execute(
+                "UPDATE trash SET deleted_at = datetime('now', '-31 days') WHERE id = ?1",
+                params![old],
+            )
+            .unwrap();
+
+        assert_eq!(db.purge_trash_older_than(TRASH_RETENTION_DAYS).unwrap(), 1);
+        let left = db.list_trash().unwrap();
+        assert_eq!(left.len(), 1);
+        assert_ne!(left[0].id, old);
+    }
+
+    #[test]
+    fn a_trash_payload_from_a_newer_version_is_refused_not_guessed() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", None).unwrap();
+        db.delete_project(p.id).unwrap();
+        let entry_id = db.list_trash().unwrap()[0].id;
+        db.conn()
+            .execute(
+                "UPDATE trash SET payload_version = 99 WHERE id = ?1",
+                params![entry_id],
+            )
+            .unwrap();
+
+        let err = db.restore_trash(entry_id).unwrap_err();
+        assert!(err.to_string().contains("newer version"), "got: {err}");
     }
 
     #[test]

@@ -4,7 +4,7 @@ use crate::db::{Database, ForwardExclusion, RemoteBackend};
 use crate::forwards::{ForwardManager, ForwardStatus};
 use crate::paths;
 use crate::scanner::ActivePort;
-use portsage_client::{ConfigSnapshot, KillEntry, RangeBounds};
+use portsage_client::{ConfigSnapshot, KillEntry, RangeBounds, RestoreOutcome, TrashEntry};
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
 
@@ -69,6 +69,30 @@ pub fn remove_port(
 ) -> Result<(), String> {
     let client = router.client().map_err(|e| e.to_string())?;
     client.remove_port(&project_name, &service)
+}
+
+// === Trash commands ===
+//
+// A deleted project or port is archived rather than dropped; these expose
+// the archive so the UI can show and restore it. Same router dispatch as
+// every other command, so the trash of a remote backend is the remote's.
+
+#[tauri::command]
+pub fn list_trash(router: State<Arc<BackendRouter>>) -> Result<Vec<TrashEntry>, String> {
+    let client = router.client().map_err(|e| e.to_string())?;
+    client.list_trash()
+}
+
+#[tauri::command]
+pub fn restore_trash(router: State<Arc<BackendRouter>>, id: i64) -> Result<RestoreOutcome, String> {
+    let client = router.client().map_err(|e| e.to_string())?;
+    client.restore_trash(id)
+}
+
+#[tauri::command]
+pub fn purge_trash(router: State<Arc<BackendRouter>>, id: Option<i64>) -> Result<usize, String> {
+    let client = router.client().map_err(|e| e.to_string())?;
+    client.purge_trash(id)
 }
 
 #[tauri::command]
@@ -608,6 +632,8 @@ mod tests {
             "kill_project",
             "open_in_browser",
             "find_project_by_path",
+            "list_trash",
+            "restore_trash",
         ] {
             assert!(
                 names.contains(&expected),

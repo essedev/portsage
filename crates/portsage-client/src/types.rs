@@ -76,6 +76,40 @@ pub struct RangeBounds {
     pub range_end: i64,
 }
 
+/// What a trash row holds: a whole project with its ports, or a single port.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TrashKind {
+    Project,
+    Port,
+}
+
+/// One archived deletion, as shown in the trash view. The snapshot itself
+/// stays server-side: clients only need enough to recognise what they are
+/// about to restore, so `label` and `detail` are pre-rendered by the backend.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TrashEntry {
+    pub id: i64,
+    pub kind: TrashKind,
+    /// Project name, or `"<project> / <service>"` for a single port.
+    pub label: String,
+    /// One-line summary: `"range 4060-4069, 6 ports"` or `"port 4332"`.
+    pub detail: String,
+    pub deleted_at: String,
+}
+
+/// Result of restoring a trash entry. Ports already taken by a live project
+/// are reported in `skipped_ports` rather than failing the whole restore: a
+/// project that comes back missing one port is more useful than one that
+/// cannot come back at all.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RestoreOutcome {
+    pub kind: TrashKind,
+    pub project: String,
+    pub restored_ports: Vec<i64>,
+    pub skipped_ports: Vec<i64>,
+}
+
 /// Current global configuration snapshot. Values are returned as strings to
 /// match the SQLite column type (the backend stores everything as TEXT).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
