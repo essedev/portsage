@@ -15,7 +15,10 @@ import { UIText } from "@/components/ui/UIText";
 import { UIButton } from "@/components/ui/UIButton";
 import { UIDivider } from "@/components/ui/UIDivider";
 import { UIBadge } from "@/components/ui/UIBadge";
-import { PortRow } from "@/components/PortRow";
+import { ForwardIndicator } from "@/components/PortForwardIndicator";
+import { UIStatus } from "@/components/ui/UIStatus";
+import { UIPortLink } from "@/components/ui/UIPortLink";
+import { UITable, type UITableColumn } from "@/components/ui/UITable";
 import { AddPortForm } from "@/components/AddPortForm";
 import { EditProjectForm } from "@/components/EditProjectForm";
 import * as cmd from "@/lib/commands";
@@ -167,6 +170,108 @@ export function ProjectDetail({
     if (success) showSuccess(success);
   };
 
+  // Inactive ports are dimmed rather than hidden: the dot already encodes
+  // the state, but toning the text down makes the list far quicker to scan.
+  const tone = (p: PortStatus) => (p.active ? "" : "text-text-muted!");
+
+  const portColumns: UITableColumn<PortStatus>[] = [
+    {
+      key: "status",
+      width: "w-7",
+      align: "center",
+      cell: (p) => <UIStatus active={p.active} />,
+    },
+    {
+      key: "service",
+      header: "Service",
+      cell: (p) => (
+        <UIText variant="body" className={`truncate block ${tone(p)}`}>
+          {p.service}
+        </UIText>
+      ),
+    },
+    {
+      key: "process",
+      header: "Process",
+      width: "w-32",
+      cell: (p) => (
+        <UIText variant="mono" className="truncate block text-text-muted text-[11px]!">
+          {p.active && p.process ? p.process : ""}
+        </UIText>
+      ),
+    },
+    {
+      key: "pid",
+      header: "PID",
+      width: "w-16",
+      align: "right",
+      cell: (p) => (
+        <UIText variant="mono" className="text-text-secondary text-[11px]! tabular-nums">
+          {p.pid ?? ""}
+        </UIText>
+      ),
+    },
+    {
+      key: "port",
+      header: "Port",
+      width: "w-16",
+      align: "right",
+      cell: (p) => (
+        <span className={tone(p)}>
+          <UIPortLink port={p.port} />
+        </span>
+      ),
+    },
+    {
+      key: "forward",
+      width: "w-8",
+      align: "center",
+      cell: (p) =>
+        isRemote ? (
+          <ForwardIndicator
+            forward={forwards.byPort[p.port] ?? { state: "cancelled" }}
+            port={p.port}
+            onClick={() => handleToggleForward(p)}
+          />
+        ) : null,
+    },
+    {
+      key: "kill",
+      width: "w-8",
+      align: "center",
+      cell: (p) =>
+        p.active ? (
+          <UIButton
+            variant="warning"
+            size="icon-sm"
+            className="opacity-0 group-hover:opacity-100"
+            title="Stop process on this port"
+            aria-label={`Stop process on port ${p.port}`}
+            onClick={() => handleKillSingle(p)}
+          >
+            <Power size={14} aria-hidden="true" />
+          </UIButton>
+        ) : null,
+    },
+    {
+      key: "remove",
+      width: "w-8",
+      align: "center",
+      cell: (p) => (
+        <UIButton
+          variant="danger"
+          size="icon-sm"
+          className="opacity-0 group-hover:opacity-100"
+          title="Remove port from project"
+          aria-label={`Remove ${p.service} (port ${p.port}) from project`}
+          onClick={() => onRemovePort(project.name, p.service)}
+        >
+          <Trash2 size={14} aria-hidden="true" />
+        </UIButton>
+      ),
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-[var(--spacing-4)] p-[var(--spacing-5)]">
       {editing ? (
@@ -316,37 +421,13 @@ export function ProjectDetail({
         />
       )}
 
-      {project.ports.length === 0 ? (
-        <p className="text-text-muted text-[13px]">
-          No ports registered
-        </p>
-      ) : (
-        <div className="flex flex-col">
-          {/* Column header - widths must match PortRow exactly (same padding,
-              same gap, same per-column widths) so the labels align over their
-              respective columns. */}
-          <div className="flex items-center gap-[var(--spacing-2)] h-7 px-[var(--spacing-1)] pb-[var(--spacing-2)] mb-[var(--spacing-1)] border-b border-border-subtle">
-            <div className="w-5 shrink-0" />
-            <UIText variant="label" className="flex-1 min-w-0">Service</UIText>
-            <UIText variant="label" className="w-32">Process</UIText>
-            <UIText variant="label" className="w-16 text-right">PID</UIText>
-            <UIText variant="label" className="w-14 text-right">Port</UIText>
-            <div className="w-6 shrink-0" />
-            <div className="w-6 shrink-0" />
-            <div className="w-6 shrink-0" />
-          </div>
-          {project.ports.map((port) => (
-            <PortRow
-              key={port.id}
-              port={port}
-              onRemove={(p) => onRemovePort(project.name, p.service)}
-              onKill={handleKillSingle}
-              forward={isRemote ? forwards.byPort[port.port] ?? { state: "cancelled" } : undefined}
-              onToggleForward={isRemote ? handleToggleForward : undefined}
-            />
-          ))}
-        </div>
-      )}
+      <UITable
+        columns={portColumns}
+        rows={project.ports}
+        rowKey={(p) => p.id}
+        empty="No ports registered"
+        dense
+      />
     </div>
   );
 }

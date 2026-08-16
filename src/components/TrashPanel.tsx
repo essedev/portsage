@@ -4,6 +4,7 @@ import { UIText } from "@/components/ui/UIText";
 import { UIButton } from "@/components/ui/UIButton";
 import { UIBadge } from "@/components/ui/UIBadge";
 import { UIPageHeader } from "@/components/ui/UIPageHeader";
+import { UITable } from "@/components/ui/UITable";
 import { useConfirm } from "@/lib/dialog";
 import { useToast } from "@/lib/toast";
 import * as cmd from "@/lib/commands";
@@ -122,75 +123,83 @@ export function TrashPanel({ onRestored, onChanged }: TrashPanelProps) {
         <UIText variant="body" className="text-text-muted">
           Loading...
         </UIText>
-      ) : entries.length === 0 ? (
-        <UIText variant="body" className="text-text-muted">
-          Nothing deleted recently
-        </UIText>
       ) : (
-        <div className="flex flex-col">
-          {/* Same column rhythm as the unmanaged-ports table: fixed widths on
-              the right-hand columns so the values line up down the page. */}
-          <div className="flex items-center gap-[var(--spacing-2)] pb-[var(--spacing-2)] mb-[var(--spacing-1)] border-b border-border-subtle">
-            <div className="w-16 shrink-0" />
-            <UIText variant="label" className="flex-1 min-w-0">
-              Name
-            </UIText>
-            <UIText variant="label" className="w-48 shrink-0">
-              What
-            </UIText>
-            <UIText variant="label" className="w-24 shrink-0 text-right">
-              Deleted
-            </UIText>
-            <div className="w-14 shrink-0" />
-          </div>
-          {entries.map((entry) => (
-            <div
-              key={entry.id}
-              className="flex items-center gap-[var(--spacing-2)] h-9 hover:bg-bg-elevated rounded-[var(--radius-sm)] px-[var(--spacing-1)] group"
-            >
-              <div className="w-16 shrink-0">
-                <UIBadge variant="inactive">{entry.kind}</UIBadge>
-              </div>
-              <UIText variant="body" className="flex-1 min-w-0 truncate">
-                {entry.label}
-              </UIText>
-              <UIText
-                variant="mono"
-                className="w-48 shrink-0 truncate text-[11px]! text-text-secondary"
-              >
-                {entry.detail}
-              </UIText>
-              <UIText
-                variant="mono"
-                className="w-24 shrink-0 text-right text-[11px]! text-text-muted tabular-nums"
-              >
-                {entry.deleted_at.slice(0, 10)}
-              </UIText>
-              <div className="flex w-14 shrink-0 justify-end">
+        <UITable
+          columns={[
+            {
+              key: "kind",
+              width: "w-20",
+              cell: (e: TrashEntry) => <UIBadge variant="inactive">{e.kind}</UIBadge>,
+            },
+            {
+              key: "label",
+              header: "Name",
+              cell: (e: TrashEntry) => (
+                <UIText variant="body" className="truncate block">
+                  {e.label}
+                </UIText>
+              ),
+            },
+            {
+              key: "detail",
+              header: "What",
+              width: "w-48",
+              cell: (e: TrashEntry) => (
+                <UIText variant="mono" className="truncate block text-[11px]! text-text-secondary">
+                  {e.detail}
+                </UIText>
+              ),
+            },
+            {
+              key: "deleted",
+              header: "Deleted",
+              width: "w-24",
+              align: "right",
+              cell: (e: TrashEntry) => (
+                <UIText variant="mono" className="text-[11px]! text-text-muted tabular-nums">
+                  {e.deleted_at.slice(0, 10)}
+                </UIText>
+              ),
+            },
+            {
+              key: "restore",
+              width: "w-8",
+              align: "center",
+              cell: (e: TrashEntry) => (
                 <UIButton
                   variant="ghost"
                   size="icon-sm"
                   className="opacity-0 group-hover:opacity-100"
                   title="Restore"
-                  aria-label={`Restore ${entry.label}`}
-                  onClick={() => handleRestore(entry)}
+                  aria-label={`Restore ${e.label}`}
+                  onClick={() => handleRestore(e)}
                 >
                   <RotateCcw size={14} aria-hidden="true" />
                 </UIButton>
+              ),
+            },
+            {
+              key: "purge",
+              width: "w-8",
+              align: "center",
+              cell: (e: TrashEntry) => (
                 <UIButton
                   variant="danger"
                   size="icon-sm"
                   className="opacity-0 group-hover:opacity-100"
                   title="Delete for good"
-                  aria-label={`Delete ${entry.label} for good`}
-                  onClick={() => handlePurge(entry)}
+                  aria-label={`Delete ${e.label} for good`}
+                  onClick={() => handlePurge(e)}
                 >
                   <Trash2 size={14} aria-hidden="true" />
                 </UIButton>
-              </div>
-            </div>
-          ))}
-        </div>
+              ),
+            },
+          ]}
+          rows={entries}
+          rowKey={(e) => e.id}
+          empty="Nothing deleted recently"
+        />
       )}
     </div>
   );

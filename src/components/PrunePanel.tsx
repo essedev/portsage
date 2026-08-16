@@ -4,6 +4,7 @@ import { UIText } from "@/components/ui/UIText";
 import { UIButton } from "@/components/ui/UIButton";
 import { UIDivider } from "@/components/ui/UIDivider";
 import { UIPageHeader } from "@/components/ui/UIPageHeader";
+import { UITable } from "@/components/ui/UITable";
 import { useToast } from "@/lib/toast";
 import { humanizeError } from "@/lib/errors";
 import * as cmd from "@/lib/commands";
@@ -118,47 +119,84 @@ export function PrunePanel({ onArchived }: PrunePanelProps) {
         </UIText>
       ) : (
         <>
-          <div className="flex flex-col">
-            {candidates.map((c) => {
-              const checked = selected.has(c.name);
-              return (
-                <label
-                  key={c.name}
-                  className="flex items-center gap-[var(--spacing-2)] h-9 px-[var(--spacing-1)] rounded-[var(--radius-sm)] hover:bg-bg-elevated cursor-pointer"
-                >
+          <UITable
+            columns={[
+              {
+                key: "pick",
+                width: "w-8",
+                align: "center",
+                cell: (c: StaleProject) => (
                   <input
                     type="checkbox"
-                    checked={checked}
+                    checked={selected.has(c.name)}
                     onChange={() => toggle(c.name)}
+                    // The row itself toggles too; without this the click
+                    // would bubble up and undo what the box just did.
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Select ${c.name}`}
                     className="accent-[var(--color-accent-amber)] cursor-pointer"
                   />
-                  <UIText variant="body" className="flex-1 min-w-0 truncate">
+                ),
+              },
+              {
+                key: "name",
+                header: "Project",
+                cell: (c: StaleProject) => (
+                  <UIText variant="body" className="truncate block">
                     {c.name}
                   </UIText>
+                ),
+              },
+              {
+                key: "range",
+                header: "Range",
+                width: "w-28",
+                align: "right",
+                cell: (c: StaleProject) => (
                   <UIText variant="mono" className="text-[11px]! text-text-secondary tabular-nums">
                     {c.range_start}-{c.range_end}
                   </UIText>
-                  <div className="flex items-center gap-[var(--spacing-1)] w-[220px] justify-end">
-                    {c.reason === "path_missing" ? (
-                      <>
-                        <FolderX size={12} className="text-accent-danger shrink-0" />
-                        <UIText variant="mono" className="text-[11px]! text-text-muted truncate">
-                          folder gone
-                        </UIText>
-                      </>
-                    ) : (
-                      <>
-                        <Clock size={12} className="text-text-muted shrink-0" />
-                        <UIText variant="mono" className="text-[11px]! text-text-muted">
-                          {c.inactive_days}d idle
-                        </UIText>
-                      </>
-                    )}
-                  </div>
-                </label>
-              );
-            })}
-          </div>
+                ),
+              },
+              {
+                key: "ports",
+                header: "Ports",
+                width: "w-16",
+                align: "right",
+                cell: (c: StaleProject) => (
+                  <UIText variant="mono" className="text-[11px]! text-text-muted tabular-nums">
+                    {c.registered_ports}
+                  </UIText>
+                ),
+              },
+              {
+                key: "why",
+                header: "Why",
+                width: "w-40",
+                cell: (c: StaleProject) =>
+                  c.reason === "path_missing" ? (
+                    <span className="flex items-center gap-[var(--spacing-1)]">
+                      <FolderX size={12} className="text-accent-danger shrink-0" />
+                      <UIText variant="mono" className="text-[11px]! text-text-muted truncate">
+                        folder gone
+                      </UIText>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-[var(--spacing-1)]">
+                      <Clock size={12} className="text-text-muted shrink-0" />
+                      <UIText variant="mono" className="text-[11px]! text-text-muted">
+                        {c.inactive_days}d idle
+                      </UIText>
+                    </span>
+                  ),
+              },
+            ]}
+            rows={candidates}
+            rowKey={(c) => c.name}
+            // Clicking anywhere on the row toggles it: the checkbox alone is
+            // a small target for a list you tick through.
+            onRowClick={(c) => toggle(c.name)}
+          />
 
           {missingCount > 0 && (
             <UIText variant="body" className="text-text-muted text-[12px]!">

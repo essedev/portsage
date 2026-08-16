@@ -1,6 +1,7 @@
 import { Power } from "lucide-react";
 import { UIText } from "@/components/ui/UIText";
 import { UIPageHeader } from "@/components/ui/UIPageHeader";
+import { UITable } from "@/components/ui/UITable";
 import { UIStatus } from "@/components/ui/UIStatus";
 import { UIButton } from "@/components/ui/UIButton";
 import { UIPortLink } from "@/components/ui/UIPortLink";
@@ -41,52 +42,63 @@ export function UnmanagedPortsPanel({ ports, onKill }: UnmanagedPortsPanelProps)
         subtitle="Active ports above 3000 not associated with any project"
       />
 
-      {ports.length === 0 ? (
-        <UIText variant="body" className="text-text-muted">
-          No unmanaged ports detected
-        </UIText>
-      ) : (
-        <div className="flex flex-col">
-          <div className="flex items-center gap-[var(--spacing-2)] pb-[var(--spacing-2)] mb-[var(--spacing-1)] border-b border-border-subtle">
-            <div className="w-5 shrink-0" />
-            <UIText variant="label" className="flex-1 min-w-0">Process</UIText>
-            <UIText variant="label" className="w-16 text-right">PID</UIText>
-            <UIText variant="label" className="w-14 text-right">Port</UIText>
-            <div className="w-6 shrink-0" />
-          </div>
-          {ports.map((port) => (
-            <div
-              key={port.port}
-              className="flex items-center gap-[var(--spacing-2)] h-9 hover:bg-bg-elevated rounded-[var(--radius-sm)] px-[var(--spacing-1)] group"
-            >
-              <div className="w-5 flex justify-center shrink-0">
-                <UIStatus active={true} />
-              </div>
-              <UIText variant="body" className="flex-1 min-w-0 truncate">
-                {port.process}
+      <UITable
+        columns={[
+          {
+            key: "status",
+            width: "w-7",
+            align: "center",
+            cell: () => <UIStatus active={true} />,
+          },
+          {
+            key: "process",
+            header: "Process",
+            cell: (p: UnmanagedPort) => (
+              <UIText variant="body" className="truncate block">
+                {p.process}
               </UIText>
-              <UIText variant="mono" className="w-16 text-right text-text-secondary text-[11px]! tabular-nums">
-                {port.pid}
+            ),
+          },
+          {
+            key: "pid",
+            header: "PID",
+            width: "w-20",
+            align: "right",
+            cell: (p: UnmanagedPort) => (
+              <UIText variant="mono" className="text-text-secondary text-[11px]! tabular-nums">
+                {p.pid}
               </UIText>
-              <div className="w-14 flex justify-end">
-                <UIPortLink port={port.port} />
-              </div>
-              <div className="w-6 flex justify-center shrink-0">
-                <UIButton
-                  variant="warning"
-                  size="icon-sm"
-                  className="opacity-0 group-hover:opacity-100"
-                  title="Stop process on this port"
-                  aria-label={`Stop process on port ${port.port}`}
-                  onClick={() => handleKill(port)}
-                >
-                  <Power size={14} aria-hidden="true" />
-                </UIButton>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ),
+          },
+          {
+            key: "port",
+            header: "Port",
+            width: "w-16",
+            align: "right",
+            cell: (p: UnmanagedPort) => <UIPortLink port={p.port} />,
+          },
+          {
+            key: "kill",
+            width: "w-8",
+            align: "center",
+            cell: (p: UnmanagedPort) => (
+              <UIButton
+                variant="warning"
+                size="icon-sm"
+                className="opacity-0 group-hover:opacity-100"
+                title="Stop process on this port"
+                aria-label={`Stop process on port ${p.port}`}
+                onClick={() => handleKill(p)}
+              >
+                <Power size={14} aria-hidden="true" />
+              </UIButton>
+            ),
+          },
+        ]}
+        rows={ports}
+        rowKey={(p) => p.port}
+        empty="No unmanaged ports detected"
+      />
     </div>
   );
 }
