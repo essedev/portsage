@@ -627,7 +627,6 @@ impl Database {
         conn.execute("DELETE FROM forward_exclusions WHERE id = ?1", params![id])?;
         Ok(())
     }
-
 }
 
 #[cfg(feature = "gui")]
@@ -884,9 +883,7 @@ mod tests {
     #[test]
     fn update_project_unknown_project_errors() {
         let db = fresh_db();
-        let err = db
-            .update_project("ghost", Some("x"), None)
-            .unwrap_err();
+        let err = db.update_project("ghost", Some("x"), None).unwrap_err();
         assert!(err.to_string().contains("not found"), "got: {err}");
     }
 
@@ -981,234 +978,234 @@ mod tests {
     // gated above.
     #[cfg(feature = "gui")]
     mod multi_host {
-    use super::*;
+        use super::*;
 
-    fn input<'a>(name: &'a str, alias: &'a str) -> RemoteBackendInput<'a> {
-        RemoteBackendInput {
-            name,
-            ssh_alias: alias,
-            remote_socket_path: "/run/portsage/portsage.sock",
-            local_socket_path: "/tmp/portsage-dev.sock",
-            auto_forward_enabled: false,
+        fn input<'a>(name: &'a str, alias: &'a str) -> RemoteBackendInput<'a> {
+            RemoteBackendInput {
+                name,
+                ssh_alias: alias,
+                remote_socket_path: "/run/portsage/portsage.sock",
+                local_socket_path: "/tmp/portsage-dev.sock",
+                auto_forward_enabled: false,
+            }
         }
-    }
 
-    #[test]
-    fn remote_backend_round_trip() {
-        let db = fresh_db();
-        let created = db
-            .create_remote_backend(input("dev", "dev-server"))
-            .unwrap();
-        assert!(created.id > 0);
-        assert_eq!(created.name, "dev");
-        assert_eq!(created.ssh_alias, "dev-server");
-        assert_eq!(created.remote_socket_path, "/run/portsage/portsage.sock");
-        assert_eq!(created.local_socket_path, "/tmp/portsage-dev.sock");
-        assert!(!created.auto_forward_enabled);
-        assert!(!created.created_at.is_empty());
+        #[test]
+        fn remote_backend_round_trip() {
+            let db = fresh_db();
+            let created = db
+                .create_remote_backend(input("dev", "dev-server"))
+                .unwrap();
+            assert!(created.id > 0);
+            assert_eq!(created.name, "dev");
+            assert_eq!(created.ssh_alias, "dev-server");
+            assert_eq!(created.remote_socket_path, "/run/portsage/portsage.sock");
+            assert_eq!(created.local_socket_path, "/tmp/portsage-dev.sock");
+            assert!(!created.auto_forward_enabled);
+            assert!(!created.created_at.is_empty());
 
-        let found = db
-            .get_remote_backend_by_name("dev")
-            .unwrap()
-            .expect("backend should exist");
-        assert_eq!(found, created);
-    }
+            let found = db
+                .get_remote_backend_by_name("dev")
+                .unwrap()
+                .expect("backend should exist");
+            assert_eq!(found, created);
+        }
 
-    #[test]
-    fn remote_backend_list_orders_by_name() {
-        let db = fresh_db();
-        db.create_remote_backend(input("staging", "stage")).unwrap();
-        db.create_remote_backend(input("dev", "dev-server"))
-            .unwrap();
-        let all = db.list_remote_backends().unwrap();
-        let names: Vec<_> = all.iter().map(|b| b.name.as_str()).collect();
-        assert_eq!(names, ["dev", "staging"]);
-    }
+        #[test]
+        fn remote_backend_list_orders_by_name() {
+            let db = fresh_db();
+            db.create_remote_backend(input("staging", "stage")).unwrap();
+            db.create_remote_backend(input("dev", "dev-server"))
+                .unwrap();
+            let all = db.list_remote_backends().unwrap();
+            let names: Vec<_> = all.iter().map(|b| b.name.as_str()).collect();
+            assert_eq!(names, ["dev", "staging"]);
+        }
 
-    #[test]
-    fn remote_backend_duplicate_name_fails() {
-        let db = fresh_db();
-        db.create_remote_backend(input("dev", "dev-server"))
-            .unwrap();
-        let err = db.create_remote_backend(input("dev", "other-server"));
-        assert!(err.is_err(), "second insert with same name should fail");
-    }
+        #[test]
+        fn remote_backend_duplicate_name_fails() {
+            let db = fresh_db();
+            db.create_remote_backend(input("dev", "dev-server"))
+                .unwrap();
+            let err = db.create_remote_backend(input("dev", "other-server"));
+            assert!(err.is_err(), "second insert with same name should fail");
+        }
 
-    #[test]
-    fn remote_backend_empty_name_rejected_before_db() {
-        // Defends against the frontend posting blank values. The DB has NOT NULL
-        // but allows empty strings; we want a clear error at insert time.
-        let db = fresh_db();
-        let bad = RemoteBackendInput {
-            name: "  ",
-            ssh_alias: "x",
-            remote_socket_path: "/x",
-            local_socket_path: "/y",
-            auto_forward_enabled: false,
-        };
-        let err = db.create_remote_backend(bad).unwrap_err().to_string();
-        assert!(err.contains("name is required"), "got: {err}");
-    }
+        #[test]
+        fn remote_backend_empty_name_rejected_before_db() {
+            // Defends against the frontend posting blank values. The DB has NOT NULL
+            // but allows empty strings; we want a clear error at insert time.
+            let db = fresh_db();
+            let bad = RemoteBackendInput {
+                name: "  ",
+                ssh_alias: "x",
+                remote_socket_path: "/x",
+                local_socket_path: "/y",
+                auto_forward_enabled: false,
+            };
+            let err = db.create_remote_backend(bad).unwrap_err().to_string();
+            assert!(err.contains("name is required"), "got: {err}");
+        }
 
-    #[test]
-    fn remote_backend_update_changes_fields() {
-        let db = fresh_db();
-        let created = db
-            .create_remote_backend(input("dev", "dev-server"))
-            .unwrap();
-        let updated = db
-            .update_remote_backend(
-                created.id,
-                RemoteBackendInput {
-                    name: "dev",
-                    ssh_alias: "dev2",
-                    remote_socket_path: "/run/portsage/v2.sock",
-                    local_socket_path: "/tmp/portsage-dev.sock",
-                    auto_forward_enabled: true,
-                },
-            )
-            .unwrap();
-        assert_eq!(updated.ssh_alias, "dev2");
-        assert_eq!(updated.remote_socket_path, "/run/portsage/v2.sock");
-        assert!(updated.auto_forward_enabled);
-        // created_at preserved across updates.
-        assert_eq!(updated.created_at, created.created_at);
-    }
+        #[test]
+        fn remote_backend_update_changes_fields() {
+            let db = fresh_db();
+            let created = db
+                .create_remote_backend(input("dev", "dev-server"))
+                .unwrap();
+            let updated = db
+                .update_remote_backend(
+                    created.id,
+                    RemoteBackendInput {
+                        name: "dev",
+                        ssh_alias: "dev2",
+                        remote_socket_path: "/run/portsage/v2.sock",
+                        local_socket_path: "/tmp/portsage-dev.sock",
+                        auto_forward_enabled: true,
+                    },
+                )
+                .unwrap();
+            assert_eq!(updated.ssh_alias, "dev2");
+            assert_eq!(updated.remote_socket_path, "/run/portsage/v2.sock");
+            assert!(updated.auto_forward_enabled);
+            // created_at preserved across updates.
+            assert_eq!(updated.created_at, created.created_at);
+        }
 
-    #[test]
-    fn remote_backend_update_unknown_id_errors() {
-        let db = fresh_db();
-        let err = db
-            .update_remote_backend(9999, input("dev", "dev-server"))
-            .unwrap_err();
-        assert!(err.to_string().contains("not found"), "got: {err}");
-    }
+        #[test]
+        fn remote_backend_update_unknown_id_errors() {
+            let db = fresh_db();
+            let err = db
+                .update_remote_backend(9999, input("dev", "dev-server"))
+                .unwrap_err();
+            assert!(err.to_string().contains("not found"), "got: {err}");
+        }
 
-    #[test]
-    fn remote_backend_delete_removes() {
-        let db = fresh_db();
-        let b = db
-            .create_remote_backend(input("dev", "dev-server"))
-            .unwrap();
-        db.delete_remote_backend(b.id).unwrap();
-        assert!(db.get_remote_backend_by_name("dev").unwrap().is_none());
-    }
+        #[test]
+        fn remote_backend_delete_removes() {
+            let db = fresh_db();
+            let b = db
+                .create_remote_backend(input("dev", "dev-server"))
+                .unwrap();
+            db.delete_remote_backend(b.id).unwrap();
+            assert!(db.get_remote_backend_by_name("dev").unwrap().is_none());
+        }
 
-    #[test]
-    fn remote_backend_set_auto_forward_toggle() {
-        let db = fresh_db();
-        let b = db
-            .create_remote_backend(input("dev", "dev-server"))
-            .unwrap();
-        assert!(!b.auto_forward_enabled);
-        db.set_remote_backend_auto_forward(b.id, true).unwrap();
-        let after = db.get_remote_backend_by_name("dev").unwrap().unwrap();
-        assert!(after.auto_forward_enabled);
-        db.set_remote_backend_auto_forward(b.id, false).unwrap();
-        let after2 = db.get_remote_backend_by_name("dev").unwrap().unwrap();
-        assert!(!after2.auto_forward_enabled);
-    }
+        #[test]
+        fn remote_backend_set_auto_forward_toggle() {
+            let db = fresh_db();
+            let b = db
+                .create_remote_backend(input("dev", "dev-server"))
+                .unwrap();
+            assert!(!b.auto_forward_enabled);
+            db.set_remote_backend_auto_forward(b.id, true).unwrap();
+            let after = db.get_remote_backend_by_name("dev").unwrap().unwrap();
+            assert!(after.auto_forward_enabled);
+            db.set_remote_backend_auto_forward(b.id, false).unwrap();
+            let after2 = db.get_remote_backend_by_name("dev").unwrap().unwrap();
+            assert!(!after2.auto_forward_enabled);
+        }
 
-    #[test]
-    fn remote_backend_set_auto_forward_unknown_id_errors() {
-        let db = fresh_db();
-        let err = db.set_remote_backend_auto_forward(9999, true).unwrap_err();
-        assert!(err.to_string().contains("not found"));
-    }
+        #[test]
+        fn remote_backend_set_auto_forward_unknown_id_errors() {
+            let db = fresh_db();
+            let err = db.set_remote_backend_auto_forward(9999, true).unwrap_err();
+            assert!(err.to_string().contains("not found"));
+        }
 
-    // --- forward_exclusions ---
+        // --- forward_exclusions ---
 
-    fn make_backend(db: &Database, name: &str) -> RemoteBackend {
-        db.create_remote_backend(input(name, "alias")).unwrap()
-    }
+        fn make_backend(db: &Database, name: &str) -> RemoteBackend {
+            db.create_remote_backend(input(name, "alias")).unwrap()
+        }
 
-    #[test]
-    fn forward_exclusion_add_then_list() {
-        let db = fresh_db();
-        let b = make_backend(&db, "dev");
-        let e = db.add_forward_exclusion(b.id, 4060).unwrap();
-        assert_eq!(e.backend_id, b.id);
-        assert_eq!(e.port, 4060);
-        let all = db.list_forward_exclusions(b.id).unwrap();
-        assert_eq!(all.len(), 1);
-        assert_eq!(all[0].port, 4060);
-    }
+        #[test]
+        fn forward_exclusion_add_then_list() {
+            let db = fresh_db();
+            let b = make_backend(&db, "dev");
+            let e = db.add_forward_exclusion(b.id, 4060).unwrap();
+            assert_eq!(e.backend_id, b.id);
+            assert_eq!(e.port, 4060);
+            let all = db.list_forward_exclusions(b.id).unwrap();
+            assert_eq!(all.len(), 1);
+            assert_eq!(all[0].port, 4060);
+        }
 
-    #[test]
-    fn forward_exclusion_list_orders_by_port() {
-        let db = fresh_db();
-        let b = make_backend(&db, "dev");
-        db.add_forward_exclusion(b.id, 4070).unwrap();
-        db.add_forward_exclusion(b.id, 4060).unwrap();
-        db.add_forward_exclusion(b.id, 4080).unwrap();
-        let ports: Vec<i64> = db
-            .list_forward_exclusions(b.id)
-            .unwrap()
-            .into_iter()
-            .map(|e| e.port)
-            .collect();
-        assert_eq!(ports, [4060, 4070, 4080]);
-    }
+        #[test]
+        fn forward_exclusion_list_orders_by_port() {
+            let db = fresh_db();
+            let b = make_backend(&db, "dev");
+            db.add_forward_exclusion(b.id, 4070).unwrap();
+            db.add_forward_exclusion(b.id, 4060).unwrap();
+            db.add_forward_exclusion(b.id, 4080).unwrap();
+            let ports: Vec<i64> = db
+                .list_forward_exclusions(b.id)
+                .unwrap()
+                .into_iter()
+                .map(|e| e.port)
+                .collect();
+            assert_eq!(ports, [4060, 4070, 4080]);
+        }
 
-    #[test]
-    fn forward_exclusion_duplicate_rejected() {
-        // The unique constraint protects the sync logic from "is 4060 excluded?"
-        // returning a list with duplicates - we'd waste branches checking
-        // both rows.
-        let db = fresh_db();
-        let b = make_backend(&db, "dev");
-        db.add_forward_exclusion(b.id, 4060).unwrap();
-        let err = db.add_forward_exclusion(b.id, 4060);
-        assert!(err.is_err());
-    }
+        #[test]
+        fn forward_exclusion_duplicate_rejected() {
+            // The unique constraint protects the sync logic from "is 4060 excluded?"
+            // returning a list with duplicates - we'd waste branches checking
+            // both rows.
+            let db = fresh_db();
+            let b = make_backend(&db, "dev");
+            db.add_forward_exclusion(b.id, 4060).unwrap();
+            let err = db.add_forward_exclusion(b.id, 4060);
+            assert!(err.is_err());
+        }
 
-    #[test]
-    fn forward_exclusion_same_port_on_different_backends_ok() {
-        let db = fresh_db();
-        let a = make_backend(&db, "dev");
-        let b = make_backend(&db, "stage");
-        db.add_forward_exclusion(a.id, 4060).unwrap();
-        db.add_forward_exclusion(b.id, 4060).unwrap();
-        assert_eq!(db.list_forward_exclusions(a.id).unwrap().len(), 1);
-        assert_eq!(db.list_forward_exclusions(b.id).unwrap().len(), 1);
-    }
+        #[test]
+        fn forward_exclusion_same_port_on_different_backends_ok() {
+            let db = fresh_db();
+            let a = make_backend(&db, "dev");
+            let b = make_backend(&db, "stage");
+            db.add_forward_exclusion(a.id, 4060).unwrap();
+            db.add_forward_exclusion(b.id, 4060).unwrap();
+            assert_eq!(db.list_forward_exclusions(a.id).unwrap().len(), 1);
+            assert_eq!(db.list_forward_exclusions(b.id).unwrap().len(), 1);
+        }
 
-    #[test]
-    fn forward_exclusion_out_of_range_port_rejected() {
-        let db = fresh_db();
-        let b = make_backend(&db, "dev");
-        assert!(db.add_forward_exclusion(b.id, 0).is_err());
-        assert!(db.add_forward_exclusion(b.id, 70000).is_err());
-        assert!(db.add_forward_exclusion(b.id, -1).is_err());
-    }
+        #[test]
+        fn forward_exclusion_out_of_range_port_rejected() {
+            let db = fresh_db();
+            let b = make_backend(&db, "dev");
+            assert!(db.add_forward_exclusion(b.id, 0).is_err());
+            assert!(db.add_forward_exclusion(b.id, 70000).is_err());
+            assert!(db.add_forward_exclusion(b.id, -1).is_err());
+        }
 
-    #[test]
-    fn forward_exclusion_remove_by_id_and_by_port() {
-        let db = fresh_db();
-        let b = make_backend(&db, "dev");
-        let e1 = db.add_forward_exclusion(b.id, 4060).unwrap();
-        db.add_forward_exclusion(b.id, 4070).unwrap();
-        db.remove_forward_exclusion(e1.id).unwrap();
-        let ports: Vec<i64> = db
-            .list_forward_exclusions(b.id)
-            .unwrap()
-            .into_iter()
-            .map(|e| e.port)
-            .collect();
-        assert_eq!(ports, [4070]);
-    }
+        #[test]
+        fn forward_exclusion_remove_by_id_and_by_port() {
+            let db = fresh_db();
+            let b = make_backend(&db, "dev");
+            let e1 = db.add_forward_exclusion(b.id, 4060).unwrap();
+            db.add_forward_exclusion(b.id, 4070).unwrap();
+            db.remove_forward_exclusion(e1.id).unwrap();
+            let ports: Vec<i64> = db
+                .list_forward_exclusions(b.id)
+                .unwrap()
+                .into_iter()
+                .map(|e| e.port)
+                .collect();
+            assert_eq!(ports, [4070]);
+        }
 
-    #[test]
-    fn delete_remote_backend_cascades_forward_exclusions() {
-        // Regression guard: deleting a backend used to leave orphan exclusion
-        // rows behind, which the sync logic would then read for a backend
-        // that no longer exists.
-        let db = fresh_db();
-        let b = make_backend(&db, "dev");
-        db.add_forward_exclusion(b.id, 4060).unwrap();
-        db.add_forward_exclusion(b.id, 4061).unwrap();
-        db.delete_remote_backend(b.id).unwrap();
-        assert!(db.list_forward_exclusions(b.id).unwrap().is_empty());
-    }
+        #[test]
+        fn delete_remote_backend_cascades_forward_exclusions() {
+            // Regression guard: deleting a backend used to leave orphan exclusion
+            // rows behind, which the sync logic would then read for a backend
+            // that no longer exists.
+            let db = fresh_db();
+            let b = make_backend(&db, "dev");
+            db.add_forward_exclusion(b.id, 4060).unwrap();
+            db.add_forward_exclusion(b.id, 4061).unwrap();
+            db.delete_remote_backend(b.id).unwrap();
+            assert!(db.list_forward_exclusions(b.id).unwrap().is_empty());
+        }
     }
 }

@@ -829,10 +829,7 @@ mod tests {
                 name: "ghost".into(),
             })
             .unwrap_err();
-        assert!(
-            matches!(err, BackendError::UnknownBackend(_)),
-            "got: {err}",
-        );
+        assert!(matches!(err, BackendError::UnknownBackend(_)), "got: {err}",);
     }
 
     #[test]
@@ -973,10 +970,7 @@ mod tests {
                 name: "ghost".into(),
             })
             .unwrap_err();
-        assert!(
-            matches!(err, BackendError::UnknownBackend(_)),
-            "got: {err}",
-        );
+        assert!(matches!(err, BackendError::UnknownBackend(_)), "got: {err}",);
     }
 
     #[test]

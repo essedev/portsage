@@ -58,8 +58,7 @@ pub enum ClientError {
 }
 
 /// Whether the client should launch the backend if the socket is missing.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub enum AutoSpawn {
     /// Do not attempt to spawn. Connection failures surface as `AppNotRunning`.
     #[default]
@@ -70,7 +69,6 @@ pub enum AutoSpawn {
     /// on macOS).
     Enabled { app_path: Option<PathBuf> },
 }
-
 
 /// Synchronous client for the Portsage Unix socket. Every method opens a
 /// fresh connection; the backend's 60 s idle timeout makes long-lived

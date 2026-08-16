@@ -575,8 +575,7 @@ pub fn remove_forward_exclusion(router: State<Arc<BackendRouter>>, id: i64) -> R
 
 #[tauri::command]
 pub fn uninstall_mcp() -> Result<(), String> {
-    portsage_mcp::unregister_from_claude(portsage_mcp::Scope::Global)
-        .map_err(|e| e.to_string())?;
+    portsage_mcp::unregister_from_claude(portsage_mcp::Scope::Global).map_err(|e| e.to_string())?;
     portsage_mcp::remove_skill().map_err(|e| e.to_string())?;
     portsage_mcp::remove_permissions().map_err(|e| e.to_string())?;
     Ok(())
