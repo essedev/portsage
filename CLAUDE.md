@@ -104,6 +104,8 @@ scripts/
 - Font: system-ui (UI), ui-monospace (titles/technical data)
 - Import alias: `@/` for absolute imports
 - Custom dropdown (UISelect), never the native select
+- Sidebar layout: the scrollable `<nav>` holds projects only (live, then the collapsed Archived section). System views (Unmanaged, Prune, Trash) are pinned in the footer with Settings via `SidebarSystemRow`, and each one renders only when its count is above zero
+- Projects are listed alphabetically, never re-ordered by live state: a list that reshuffles when a server starts is unusable
 
 ### Rust backend
 - All DB access in db.rs, exposed to the frontend via commands.rs and to socket clients via socket.rs

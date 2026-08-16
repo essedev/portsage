@@ -73,6 +73,7 @@ export function Sidebar({
   const [showAdd, setShowAdd] = useState(false);
   const [mcpInstalled, setMcpInstalled] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
+  const [activeOnly, setActiveOnly] = useState(false);
 
   useEffect(() => {
     cmd.checkMcpInstalled().then(setMcpInstalled).catch(() => setMcpInstalled(false));
@@ -80,11 +81,21 @@ export function Sidebar({
 
   const matches = (p: ProjectStatus) =>
     p.name.toLowerCase().includes(search.toLowerCase());
+  const hasActivePort = (p: ProjectStatus) => p.ports.some((port) => port.active);
+  // Alphabetical, not by range: the range order is registration order, which
+  // is arbitrary to the eye. Both are stable (a project stays put), but only
+  // one lets you guess where a name will be. Sorting by "active first" was
+  // rejected on purpose - rows would jump every time a server starts.
+  const byName = (a: ProjectStatus, b: ProjectStatus) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   // Archived projects live in their own collapsed section rather than in
   // Settings: out of the way, but still visible enough that nobody forgets
   // their names and ranges are still taken.
-  const filtered = projects.filter((p) => !p.archived_at && matches(p));
-  const archived = projects.filter((p) => p.archived_at && matches(p));
+  const filtered = projects
+    .filter((p) => !p.archived_at && matches(p) && (!activeOnly || hasActivePort(p)))
+    .sort(byName);
+  const archived = projects.filter((p) => p.archived_at && matches(p)).sort(byName);
+  const activeCount = projects.filter((p) => !p.archived_at && hasActivePort(p)).length;
 
   return (
     <aside
@@ -105,6 +116,36 @@ export function Sidebar({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        {/* One filter, not a menu: with a search box already there, the only
+            question worth a control is "what is running right now". */}
+        {activeCount > 0 && (
+          <button
+            onClick={() => setActiveOnly(!activeOnly)}
+            aria-pressed={activeOnly}
+            className={`
+              flex items-center justify-between
+              px-[var(--spacing-2)] py-[var(--spacing-1)]
+              rounded-[var(--radius-sm)] cursor-pointer
+              border transition-colors duration-150
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
+              ${activeOnly
+                ? "border-accent-amber/30 bg-bg-elevated"
+                : "border-transparent hover:bg-bg-elevated"
+              }
+            `}
+          >
+            <div className="flex items-center gap-[var(--spacing-1)]">
+              <UIStatus active={true} />
+              <UIText
+                variant="body"
+                className={`text-[11px] ${activeOnly ? "text-accent-amber!" : "text-text-secondary!"}`}
+              >
+                Active only
+              </UIText>
+            </div>
+            <UIBadge variant={activeOnly ? "active" : "inactive"}>{activeCount}</UIBadge>
+          </button>
+        )}
         <UIButton
           variant="ghost"
           className="w-full justify-start"
@@ -249,97 +290,43 @@ export function Sidebar({
           </>
         )}
 
-        {unmanagedPorts.length > 0 && (
-          <>
-            <UIDivider className="my-[var(--spacing-2)]" />
-            <button
-              onClick={onShowUnmanaged}
-              className={`
-                w-full flex items-center justify-between
-                px-[var(--spacing-2)] py-[var(--spacing-2)]
-                rounded-[var(--radius-sm)]
-                text-left cursor-pointer transition-colors duration-150
-                focus-visible:outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
-                ${activeView === "unmanaged"
-                  ? "bg-bg-elevated border border-accent-amber/30"
-                  : "border border-transparent hover:bg-bg-elevated"
-                }
-              `}
-            >
-              <div className="flex items-center gap-[var(--spacing-1)]">
-                <AlertTriangle size={12} className="text-accent-amber" />
-                <UIText
-                  variant="body"
-                  className={`text-[12px] ${activeView === "unmanaged" ? "text-accent-amber!" : "text-text-secondary!"}`}
-                >
-                  Unmanaged
-                </UIText>
-              </div>
-              <UIBadge variant="inactive">{unmanagedPorts.length}</UIBadge>
-            </button>
-          </>
-        )}
-
-        {staleCount > 0 && (
-          <button
-            onClick={onShowPrune}
-            className={`
-              w-full flex items-center justify-between
-              px-[var(--spacing-2)] py-[var(--spacing-2)] mt-[var(--spacing-1)]
-              rounded-[var(--radius-sm)]
-              text-left cursor-pointer transition-colors duration-150
-              focus-visible:outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
-              ${activeView === "prune"
-                ? "bg-bg-elevated border border-accent-amber/30"
-                : "border border-transparent hover:bg-bg-elevated"
-              }
-            `}
-          >
-            <div className="flex items-center gap-[var(--spacing-1)]">
-              <Sparkles size={12} className="text-text-muted" />
-              <UIText
-                variant="body"
-                className={`text-[12px] ${activeView === "prune" ? "text-accent-amber!" : "text-text-secondary!"}`}
-              >
-                Prune
-              </UIText>
-            </div>
-            <UIBadge variant="inactive">{staleCount}</UIBadge>
-          </button>
-        )}
-
-        {/* The trash only earns a row once it holds something: a permanent
-            empty bin is noise, and a hidden one is never found when needed. */}
-        {trashCount > 0 && (
-          <button
-            onClick={onShowTrash}
-            className={`
-              w-full flex items-center justify-between
-              px-[var(--spacing-2)] py-[var(--spacing-2)] mt-[var(--spacing-1)]
-              rounded-[var(--radius-sm)]
-              text-left cursor-pointer transition-colors duration-150
-              focus-visible:outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
-              ${activeView === "trash"
-                ? "bg-bg-elevated border border-accent-amber/30"
-                : "border border-transparent hover:bg-bg-elevated"
-              }
-            `}
-          >
-            <div className="flex items-center gap-[var(--spacing-1)]">
-              <Trash2 size={12} className="text-text-muted" />
-              <UIText
-                variant="body"
-                className={`text-[12px] ${activeView === "trash" ? "text-accent-amber!" : "text-text-secondary!"}`}
-              >
-                Trash
-              </UIText>
-            </div>
-            <UIBadge variant="inactive">{trashCount}</UIBadge>
-          </button>
-        )}
       </nav>
 
       <div className="flex flex-col gap-[var(--spacing-1)] p-[var(--spacing-2)]">
+        {/* System views are pinned next to Settings rather than living in
+            the scrollable project list: with 27 projects they used to sit
+            below the fold. Each row still appears only when it has something
+            to show. */}
+        {(staleCount > 0 || unmanagedPorts.length > 0 || trashCount > 0) && (
+          <UIDivider className="mb-[var(--spacing-1)]" />
+        )}
+        {unmanagedPorts.length > 0 && (
+          <SidebarSystemRow
+            icon={<AlertTriangle size={14} className="text-accent-amber" />}
+            label="Unmanaged"
+            count={unmanagedPorts.length}
+            selected={activeView === "unmanaged"}
+            onClick={onShowUnmanaged}
+          />
+        )}
+        {staleCount > 0 && (
+          <SidebarSystemRow
+            icon={<Sparkles size={14} className="text-text-muted" />}
+            label="Prune"
+            count={staleCount}
+            selected={activeView === "prune"}
+            onClick={onShowPrune}
+          />
+        )}
+        {trashCount > 0 && (
+          <SidebarSystemRow
+            icon={<Trash2 size={14} className="text-text-muted" />}
+            label="Trash"
+            count={trashCount}
+            selected={activeView === "trash"}
+            onClick={onShowTrash}
+          />
+        )}
         {!mcpInstalled && (
           <UIButton
             variant="primary"
@@ -360,5 +347,53 @@ export function Sidebar({
         </UIButton>
       </div>
     </aside>
+  );
+}
+
+/**
+ * One pinned system view in the sidebar footer (Unmanaged, Prune, Trash).
+ * Same shape as a project row so the two read as one list, but it lives
+ * outside the scroll area and carries its own count.
+ */
+function SidebarSystemRow({
+  icon,
+  label,
+  count,
+  selected,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-current={selected ? "page" : undefined}
+      className={`
+        w-full flex items-center justify-between
+        px-[var(--spacing-2)] py-[var(--spacing-2)]
+        rounded-[var(--radius-sm)]
+        text-left cursor-pointer transition-colors duration-150
+        focus-visible:outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
+        ${selected
+          ? "bg-bg-elevated border border-accent-amber/30"
+          : "border border-transparent hover:bg-bg-elevated"
+        }
+      `}
+    >
+      <div className="flex items-center gap-[var(--spacing-2)]">
+        {icon}
+        <UIText
+          variant="body"
+          className={`text-[12px] ${selected ? "text-accent-amber!" : "text-text-secondary!"}`}
+        >
+          {label}
+        </UIText>
+      </div>
+      <UIBadge variant="inactive">{count}</UIBadge>
+    </button>
   );
 }

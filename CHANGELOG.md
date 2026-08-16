@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Sidebar: Unmanaged, Prune and Trash moved out of the scrollable project list into the footer next to Settings. With 27 projects they used to sit below the fold; they are system views, not projects, and each row still appears only when it has something to show
+- The project list is sorted alphabetically instead of by range. Range order is registration order, which is arbitrary to the eye; both are stable, but only one lets you guess where a name will be. Sorting active-first was rejected on purpose, since rows would jump whenever a server starts or stops
+- An "Active only" toggle sits under the search box, shown when at least one project has a listening port. One filter rather than a sort menu: with a search box present, "what is running right now" is the only question worth a control
+
 ## [0.14.1] - 2026-08-16
 
 ### Fixed
