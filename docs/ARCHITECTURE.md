@@ -132,6 +132,7 @@ The Rust backend listens on a Unix domain socket (see the table above for the pa
 | `list_trash`           | none                                                                  | `[TrashEntry]`       |
 | `restore_trash`        | `id` (int)                                                            | `RestoreOutcome`     |
 | `purge_trash`          | `id` (int) or `all` (bool)                                            | `{ purged: int }`    |
+| `get_remote_backend`   | `name` (string)                                                       | `RemoteBackend` or `null` (Mac only; the CLI uses it to find a backend's forwarded socket) |
 
 Wire types (`crates/portsage-client/src/types.rs` is the source of truth):
 

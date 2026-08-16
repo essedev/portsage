@@ -36,7 +36,7 @@ When changes break SSH on `forge`, check `pgrep -af sshd` first - we permanently
 src/
   components/
     ui/                    # Primitives (UICard, UIButton, UISelect, UIPortLink, etc.)
-    PortRow.tsx
+    PortForwardIndicator.tsx  # Per-port SSH forward indicator (remote backends only)
     ProjectDetail.tsx
     PopoverPanel.tsx
     Sidebar.tsx
@@ -69,6 +69,7 @@ src-tauri/
     commands.rs       # Thin Tauri wrappers over actions::* and backends::*
     scanner.rs        # Port scanner (macOS lsof + ps, Linux /proc + ss fallback)
     activity.rs       # Filesystem staleness signals behind `prune` (dir mtime + .git/logs/HEAD)
+    toolpath.rs       # Resolves external binaries (docker, lsof, ps, ss) outside the inherited PATH
     socket.rs         # Unix socket server (async), dispatches the wire protocol
     backends.rs       # Multi-host: BackendTarget, BackendManager, SshTunnel, BackendRouter, BackendClient (no Tauri deps)
     forwards.rs       # Phase 3 multi-host: ForwardManager, ForwardController, local-port collision probe, ControlMaster ownership (no Tauri deps)

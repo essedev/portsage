@@ -15,6 +15,8 @@ Lavorare con AI su 4-5 progetti in parallelo (React/Vite + Docker con PostgreSQL
 - **MCP server**: integrazione con qualsiasi editor MCP-compatibile (Claude Code, Cursor, Claude Desktop, Cline, VS Code Copilot, Codex, Windsurf) per riservare porte e registrare servizi automaticamente.
 - **CLI**: un comando `portsage` in PATH per scripting, CI e uso veloce da terminale - distribuito insieme all'app.
 - **Porte non gestite**: rileva porte attive non associate a nessun progetto.
+- **Cestino**: progetti e porte cancellati restano recuperabili 30 giorni, col loro range originale.
+- **Prune**: archivia i progetti la cui cartella non esiste più o che non tocchi da mesi, tenendo range e porte.
 - **Multi-host**: configura backend Linux remoti e raggiungili via SSH dalla UI Mac, con port forwarding automatico.
 
 ## Installazione
@@ -86,6 +88,7 @@ portsage status                            # dettaglio breve per il progetto del
 portsage reserve myapp --here              # riserva un range e lo lega alla cwd
 portsage register vite 4000 --here         # registra un servizio nel progetto della cwd
 portsage remove vite --here                # rimuove un servizio
+portsage rename vecchio nuovo --path /nuovo/path  # rinomina un progetto e/o ne cambia il path
 portsage release --here                    # elimina il range del progetto cwd (conferma; -y per saltarla)
 
 portsage scan                              # porte attive sulla macchina
@@ -93,6 +96,16 @@ portsage scan --unmanaged                  # solo porte non associate ad alcun p
 portsage kill 4000                         # SIGTERM con 2s di grazia, poi SIGKILL (conferma; -y)
 portsage kill-project --here               # uccide in parallelo tutte le porte attive del progetto cwd
 portsage open 4000                         # apre http://localhost:4000 nel browser di default
+
+portsage prune                             # progetti con la cartella sparita o fermi da mesi (solo report)
+portsage prune --days 60 --apply           # li archivia: range e porte restano riservati
+portsage archive <nome>                    # archivia un progetto
+portsage unarchive <nome>                  # lo rimette in lista
+portsage list --archived                   # include gli archiviati nell'elenco
+
+portsage trash list                        # progetti e porte cancellati, recuperabili 30 giorni
+portsage trash restore 3                   # ripristina una voce col suo range originale
+portsage trash purge 3 | --all             # cancella definitivamente (conferma; -y)
 
 portsage config get                        # legge base_port / range_size
 portsage config set range_size=20

@@ -86,6 +86,7 @@ portsage status                            # short detail for the cwd project
 portsage reserve myapp --here              # reserve a range, bind it to the cwd
 portsage register vite 4000 --here         # register a service in the cwd project
 portsage remove vite --here                # remove a service
+portsage rename old new --path /new/path   # rename a project and/or move its path
 portsage release --here                    # delete the cwd project's range (asks to confirm; -y to skip)
 
 portsage scan                              # active ports on the machine

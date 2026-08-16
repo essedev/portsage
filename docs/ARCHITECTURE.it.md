@@ -47,6 +47,8 @@ Lo stesso binario Rust gira come GUI macOS (cargo feature `gui`, default) e come
 | `commands.rs` | Wrapper Tauri sottili su `actions::*` e `backends::*`. Unico layer Tauri. |
 | `socket.rs`   | Server Unix socket (async). Parla il protocollo wire con MCP server, CLI e altri client. |
 | `scanner.rs`  | Port scanner. Impl per-OS sotto `mod macos` (lsof + ps) e `mod linux` (`/proc/net/tcp` + fallback `ss`), selezionate da `#[cfg(target_os)]`. |
+| `activity.rs` | Segnali di inattività dal filesystem, dietro `prune`. Nessuna dipendenza da DB o Tauri. |
+| `toolpath.rs` | Risolve i binari esterni (`docker`, `lsof`, `ps`, `ss`): override da env, poi `PATH`, poi le posizioni note. |
 | `backends.rs` | `BackendTarget` / `BackendManager` (gestisce i tunnel SSH) / `BackendRouter` (target attivo) / `BackendClient` (adapter Local/Remote attraverso cui ogni Tauri command passa). Nessuna dipendenza Tauri. |
 | `forwards.rs` | Fase 3 multi-host: `ForwardManager` gestisce lo stato per-(backend, porta) dei forward SSH locali. Tratti `ForwardController` + `LocalPortProbe` per testabilità. Nessuna dipendenza Tauri. |
 

@@ -136,6 +136,10 @@ Reusable base components, no domain logic.
 | `UISearch` | Input with search icon, used for filters |
 | `UISelect` | Custom dropdown (no native select). Props: `options`, `value`, `onChange`. Animated chevron, list with hover/selected states |
 | `UIDivider` | Horizontal separator line, color border-subtle |
+| `UIDialog` | Modal confirmation, `warning` / `info` kinds, driven by the `useConfirm` hook |
+| `UITabs` / `UITabPanel` | Tab strip + panel, used by Settings. Controlled or self-managed |
+| `UIToast` | Bottom-right notification, `error` / `success`, auto-dismiss after 6s, optional inline action button (the Undo after a deletion) |
+| `UIPageHeader` | Heading shared by every main view: title (`title`/h2), one-line subtitle, optional actions, divider. Never hand-roll a view heading |
 | `UITable` | The app's only table. Framed object: `border-subtle` outline, `radius-md` corners with `overflow-hidden`, `bg-surface` body and a `bg-elevated` header strip, hairline row separators (`border-subtle/60`, none on the last row). Columns declare their width once via `<colgroup>`; centered columns get tighter padding because they hold 24px icon buttons. The empty state keeps the same frame so the page does not jump when the first row lands |
 | `UIPortLink` | Port number rendered as a button. Click opens `http://localhost:PORT` in the default browser. Mono font, amber on hover |
 
