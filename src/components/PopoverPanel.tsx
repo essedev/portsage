@@ -9,7 +9,10 @@ import { useProjects } from "@/features/projects/useProjects";
 import { invoke } from "@tauri-apps/api/core";
 
 export function PopoverPanel() {
-  const { projects } = useProjects();
+  const { projects: allProjects } = useProjects();
+  // The popover is the at-a-glance view: archived projects are shelved and
+  // have no business taking up room in 350x480.
+  const projects = allProjects.filter((p) => !p.archived_at);
 
   const totalActive = projects
     .flatMap((p) => p.ports)

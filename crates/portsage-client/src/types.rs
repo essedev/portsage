@@ -22,6 +22,10 @@ pub struct ProjectStatus {
     pub range_start: i64,
     pub range_end: i64,
     pub created_at: String,
+    /// Set when the project is shelved: it keeps its range, ports and name,
+    /// and only drops out of the default listing. `None` for live projects.
+    #[serde(default)]
+    pub archived_at: Option<String>,
     pub ports: Vec<PortStatus>,
 }
 
@@ -74,6 +78,34 @@ pub struct KillEntry {
 pub struct RangeBounds {
     pub range_start: i64,
     pub range_end: i64,
+}
+
+/// Why a project turned up in `list_stale`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StaleReason {
+    /// The recorded path no longer exists. Usually a deleted project, but
+    /// sometimes a moved one, in which case the fix is `update_project`
+    /// with a new path rather than archiving.
+    PathMissing,
+    /// Nothing has touched the project directory or its git reflog for at
+    /// least the requested number of days.
+    Inactive,
+}
+
+/// A project that looks abandoned. Projects with a port listening right now
+/// are never included, whatever their age: something is using that range.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StaleProject {
+    pub name: String,
+    pub path: Option<String>,
+    pub range_start: i64,
+    pub range_end: i64,
+    pub reason: StaleReason,
+    /// Days since the last filesystem activity. `None` when the path is gone.
+    pub inactive_days: Option<i64>,
+    /// How many ports the project has registered, all of them idle.
+    pub registered_ports: i64,
 }
 
 /// What a trash row holds: a whole project with its ports, or a single port.

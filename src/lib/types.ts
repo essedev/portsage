@@ -56,7 +56,23 @@ export interface ProjectStatus {
   range_start: number;
   range_end: number;
   created_at: string;
+  /** Set when the project is shelved: keeps its range and ports, leaves the list. */
+  archived_at: string | null;
   ports: PortStatus[];
+}
+
+/** Why a project turned up in the prune list. */
+export type StaleReason = "path_missing" | "inactive";
+
+/** A project that looks abandoned. Never one with a port listening now. */
+export interface StaleProject {
+  name: string;
+  path: string | null;
+  range_start: number;
+  range_end: number;
+  reason: StaleReason;
+  inactive_days: number | null;
+  registered_ports: number;
 }
 
 // --- Multi-host (Phase 2) ---

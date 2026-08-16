@@ -21,7 +21,9 @@ use std::collections::HashSet;
 
 // Wire types live in portsage-client so the CLI and the app speak the same
 // language without drift. Re-exported here for the Tauri command layer.
-pub use portsage_client::{KillOutcome, PortStatus, ProjectStatus, RestoreOutcome, TrashEntry};
+pub use portsage_client::{
+    KillOutcome, PortStatus, ProjectStatus, RestoreOutcome, StaleProject, StaleReason, TrashEntry,
+};
 
 /// 2 seconds is the empirical sweet spot: enough for Postgres-class daemons
 /// to flush and exit cleanly, short enough that the UI doesn't feel stuck.
@@ -83,6 +85,7 @@ pub fn enrich_with_status(
             range_start: pwp.project.range_start,
             range_end: pwp.project.range_end,
             created_at: pwp.project.created_at,
+            archived_at: pwp.project.archived_at,
             ports: pwp
                 .ports
                 .into_iter()
@@ -105,9 +108,105 @@ pub fn enrich_with_status(
 }
 
 pub fn list_with_status(db: &Database) -> Result<Vec<ProjectStatus>, String> {
+    let active = scanner::scan_active_ports_detailed();
+    // Self-healing: an archived project whose port is listening again is
+    // being worked on, so it comes back to the main list on its own. Done
+    // here because this is the one path that sees both the registry and the
+    // live scan, and it runs on every refresh.
+    let ports: Vec<i64> = active.iter().map(|ap| ap.port).collect();
+    db.unarchive_projects_with_active_ports(&ports)
+        .map_err(|e| e.to_string())?;
+    let projects = db.list_projects().map_err(|e| e.to_string())?;
+    Ok(enrich_with_status(projects, &active))
+}
+
+/// Default inactivity window for `prune`. Ninety days is the point where a
+/// project is plausibly finished rather than merely paused: on a real
+/// registry it selects a handful of candidates you can judge at a glance,
+/// where 60 days already sweeps in work you are between sprints on.
+pub const DEFAULT_STALE_DAYS: i64 = 90;
+
+/// Projects that look abandoned: their path is gone, or nothing has touched
+/// them in `days` days. Anything with a port listening right now is excluded
+/// whatever its age, which is what makes acting on this list safe. Already
+/// archived projects are excluded too - they are the ones you have dealt
+/// with already.
+pub fn list_stale(db: &Database, days: i64) -> Result<Vec<StaleProject>, String> {
+    let projects = db.list_projects().map_err(|e| e.to_string())?;
+    let active: HashSet<i64> = scanner::scan_active_ports_detailed()
+        .into_iter()
+        .map(|ap| ap.port)
+        .collect();
+    Ok(stale_from(
+        projects,
+        &active,
+        days,
+        std::time::SystemTime::now(),
+    ))
+}
+
+/// The selection itself, with the scan and the clock passed in so it can be
+/// tested without touching either.
+pub fn stale_from(
+    projects: Vec<ProjectWithPorts>,
+    active: &HashSet<i64>,
+    days: i64,
+    now: std::time::SystemTime,
+) -> Vec<StaleProject> {
+    let mut out = Vec::new();
+    for pwp in projects {
+        if pwp.project.archived_at.is_some() {
+            continue;
+        }
+        if pwp.ports.iter().any(|p| active.contains(&p.port)) {
+            continue;
+        }
+        let (reason, inactive_days) =
+            match crate::activity::classify(pwp.project.path.as_deref(), now) {
+                crate::activity::Activity::PathMissing => (StaleReason::PathMissing, None),
+                crate::activity::Activity::Days(d) if d >= days => (StaleReason::Inactive, Some(d)),
+                // Recently touched, or no path to measure: not a candidate.
+                _ => continue,
+            };
+        out.push(StaleProject {
+            name: pwp.project.name,
+            path: pwp.project.path,
+            range_start: pwp.project.range_start,
+            range_end: pwp.project.range_end,
+            reason,
+            inactive_days,
+            registered_ports: pwp.ports.len() as i64,
+        });
+    }
+    // Missing paths first, then longest idle: the order you want to act in.
+    out.sort_by(|a, b| {
+        let key = |s: &StaleProject| {
+            (
+                s.reason != StaleReason::PathMissing,
+                -s.inactive_days.unwrap_or(i64::MAX),
+            )
+        };
+        key(a).cmp(&key(b))
+    });
+    out
+}
+
+/// Shelve or unshelve a project. Returns its enriched status so the caller
+/// can render the row without a second round-trip.
+pub fn set_project_archived(
+    db: &Database,
+    name: &str,
+    archived: bool,
+) -> Result<ProjectStatus, String> {
+    let updated = db
+        .set_project_archived(name, archived)
+        .map_err(|e| e.to_string())?;
     let projects = db.list_projects().map_err(|e| e.to_string())?;
     let active = scanner::scan_active_ports_detailed();
-    Ok(enrich_with_status(projects, &active))
+    enrich_with_status(projects, &active)
+        .into_iter()
+        .find(|p| p.id == updated.id)
+        .ok_or_else(|| format!("project '{name}' not found"))
 }
 
 pub fn list_unmanaged(db: &Database) -> Result<Vec<ActivePort>, String> {
@@ -141,11 +240,13 @@ pub fn set_config(db: &Database, key: &str, value: &str) -> Result<(), String> {
     db.set_config(key, value).map_err(|e| e.to_string())
 }
 
+/// Returns the id of the trash entry the removal produced, so a caller can
+/// offer an undo.
 pub fn remove_port_by_service(
     db: &Database,
     project_name: &str,
     service: &str,
-) -> Result<(), String> {
+) -> Result<Option<i64>, String> {
     let projects = db.list_projects().map_err(|e| e.to_string())?;
     let project = projects
         .iter()
@@ -517,7 +618,7 @@ pub fn open_in_browser(port: i64) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{Port, Project, ProjectWithPorts};
+    use crate::db::{Database, Port, Project, ProjectWithPorts};
 
     fn project(id: i64, name: &str, range: (i64, i64)) -> Project {
         Project {
@@ -527,6 +628,7 @@ mod tests {
             range_start: range.0,
             range_end: range.1,
             created_at: "now".into(),
+            archived_at: None,
         }
     }
 
@@ -610,6 +712,7 @@ mod tests {
                     range_start: 4000,
                     range_end: 4009,
                     created_at: "t1".into(),
+                    archived_at: None,
                 },
                 ports: vec![],
             },
@@ -746,6 +849,131 @@ mod tests {
         ));
         assert!(!is_daemon_unreachable("unknown flag: --publish"));
         assert!(!is_daemon_unreachable(""));
+    }
+
+    // --- stale_from (prune selection) ---
+
+    fn stale_project(name: &str, path: Option<&str>, ports: &[i64]) -> ProjectWithPorts {
+        ProjectWithPorts {
+            project: Project {
+                id: 1,
+                name: name.into(),
+                path: path.map(str::to_string),
+                range_start: 4000,
+                range_end: 4009,
+                created_at: "t".into(),
+                archived_at: None,
+            },
+            ports: ports
+                .iter()
+                .map(|p| Port {
+                    id: *p,
+                    project_id: 1,
+                    service: "svc".into(),
+                    port: *p,
+                    created_at: "t".into(),
+                })
+                .collect(),
+        }
+    }
+
+    fn fresh_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("portsage-stale-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn stale_from_flags_a_missing_path_regardless_of_age() {
+        let projects = vec![stale_project(
+            "gone",
+            Some("/nope/portsage-missing"),
+            &[4000],
+        )];
+        let out = stale_from(projects, &HashSet::new(), 90, std::time::SystemTime::now());
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].reason, StaleReason::PathMissing);
+        // No day count to report when there is no directory to measure.
+        assert_eq!(out[0].inactive_days, None);
+        assert_eq!(out[0].registered_ports, 1);
+    }
+
+    #[test]
+    fn stale_from_never_touches_a_project_with_a_listening_port() {
+        // The safety property that makes acting on this list safe: something
+        // is bound to that range right now, so it is in use whatever the
+        // filesystem says.
+        let projects = vec![stale_project(
+            "running",
+            Some("/nope/portsage-missing"),
+            &[4000],
+        )];
+        let active = HashSet::from([4000]);
+        assert!(stale_from(projects, &active, 90, std::time::SystemTime::now()).is_empty());
+    }
+
+    #[test]
+    fn stale_from_skips_already_archived_projects() {
+        let mut p = stale_project("shelved", Some("/nope/portsage-missing"), &[]);
+        p.project.archived_at = Some("2026-01-01 00:00:00".into());
+        assert!(stale_from(vec![p], &HashSet::new(), 90, std::time::SystemTime::now()).is_empty());
+    }
+
+    #[test]
+    fn stale_from_respects_the_threshold() {
+        let dir = fresh_dir("threshold");
+        let path = dir.to_str().unwrap().to_string();
+        let now = std::time::SystemTime::now() + std::time::Duration::from_secs(80 * 86_400);
+
+        // 80 days idle: under a 90-day threshold, over a 60-day one.
+        let under = stale_from(
+            vec![stale_project("p", Some(&path), &[])],
+            &HashSet::new(),
+            90,
+            now,
+        );
+        assert!(under.is_empty(), "80 days must not trip a 90-day threshold");
+
+        let over = stale_from(
+            vec![stale_project("p", Some(&path), &[])],
+            &HashSet::new(),
+            60,
+            now,
+        );
+        assert_eq!(over.len(), 1);
+        assert_eq!(over[0].reason, StaleReason::Inactive);
+        assert_eq!(over[0].inactive_days, Some(80));
+    }
+
+    #[test]
+    fn stale_from_ignores_projects_without_a_path() {
+        // No path means no signal. Guessing "abandoned" from silence would
+        // put every path-less project on the chopping block.
+        let projects = vec![stale_project("nopath", None, &[])];
+        assert!(stale_from(projects, &HashSet::new(), 1, std::time::SystemTime::now()).is_empty());
+    }
+
+    #[test]
+    fn stale_from_lists_missing_paths_before_idle_ones() {
+        let dir = fresh_dir("order");
+        let path = dir.to_str().unwrap().to_string();
+        let now = std::time::SystemTime::now() + std::time::Duration::from_secs(200 * 86_400);
+        let mut idle = stale_project("idle", Some(&path), &[]);
+        idle.project.name = "idle".into();
+        let out = stale_from(
+            vec![
+                idle,
+                stale_project("gone", Some("/nope/portsage-missing"), &[]),
+            ],
+            &HashSet::new(),
+            90,
+            now,
+        );
+        assert_eq!(out.len(), 2);
+        // A missing directory is a stronger signal than 200 idle days, and
+        // it is also the one that might just need its path corrected.
+        assert_eq!(out[0].name, "gone");
+        assert_eq!(out[1].name, "idle");
     }
 
     // --- remove_port_by_service ---

@@ -46,6 +46,7 @@ The same Rust binary runs as the macOS GUI (`gui` cargo feature, default) and as
 | `actions.rs`  | Pure business logic shared between Tauri commands and the socket dispatcher. No Tauri deps. |
 | `commands.rs` | Thin Tauri wrappers over `actions::*` and `backends::*`. The only Tauri layer. |
 | `socket.rs`   | Unix socket server (async). Speaks the wire protocol to the MCP server, the CLI, and other clients. |
+| `activity.rs` | Filesystem staleness signals behind `prune`. No DB or Tauri deps. |
 | `scanner.rs`  | Port scanner. Per-OS impls under `mod macos` (lsof + ps) and `mod linux` (`/proc/net/tcp` + `ss` fallback), selected by `#[cfg(target_os)]`. |
 | `backends.rs` | `BackendTarget` / `BackendManager` (owns SSH tunnels) / `BackendRouter` (active target) / `BackendClient` (Local/Remote adapter every Tauri command dispatches through). No Tauri deps. |
 | `forwards.rs` | Phase 3 multi-host: `ForwardManager` owns per-(backend, port) SSH local-forward state. `ForwardController` + `LocalPortProbe` traits for testability. No Tauri deps. |
@@ -124,6 +125,9 @@ The Rust backend listens on a Unix domain socket (see the table above for the pa
 | `kill_project`         | `project` (string)                                                    | `[KillEntry]`        |
 | `open_in_browser`      | `port` (int)                                                          | `"ok"`               |
 | `find_project_by_path` | `path` (absolute string)                                              | `ProjectStatus` or `null` |
+| `list_stale`           | `days` (int, default 90)                                              | `[StaleProject]`     |
+| `archive_project`      | `name` (string)                                                       | `ProjectStatus`      |
+| `unarchive_project`    | `name` (string)                                                       | `ProjectStatus`      |
 | `list_trash`           | none                                                                  | `[TrashEntry]`       |
 | `restore_trash`        | `id` (int)                                                            | `RestoreOutcome`     |
 | `purge_trash`          | `id` (int) or `all` (bool)                                            | `{ purged: int }`    |
@@ -138,6 +142,7 @@ Wire types (`crates/portsage-client/src/types.rs` is the source of truth):
 - `KillOutcome`: `"terminated" | "killed" | "not_active" | "permission_denied" | "docker_stopped" | "docker_cli_missing" | "docker_daemon_down" | "docker_no_container" | "docker_error"` (see [Killing a port](#killing-a-port))
 - `KillEntry`: `{ port, outcome: KillOutcome }`
 - `RemoteBackend`: `{ id, name, ssh_alias, remote_socket_path, local_socket_path, auto_forward_enabled, created_at }`
+- `StaleProject`: `{ name, path?, range_start, range_end, reason: "path_missing" | "inactive", inactive_days?, registered_ports }`
 - `TrashEntry`: `{ id, kind: "project" | "port", label, detail, deleted_at }` (`label`/`detail` are rendered server-side; the snapshot never leaves the backend)
 - `RestoreOutcome`: `{ kind, project, restored_ports, skipped_ports }`
 
@@ -179,11 +184,25 @@ Finding the docker CLI is its own problem: a macOS app bundle launched by launch
 
 The docker failure modes stay separate on the wire (`docker_cli_missing`, `docker_daemon_down`, `docker_no_container`, `docker_error`) because each asks something different of the user. The frontend renders them from `src/lib/killOutcome.ts`, keyed by a `Record<KillOutcome, ...>` so a new variant fails the typecheck rather than silently showing nothing.
 
+## Pruning abandoned projects
+
+`prune` answers "which of these am I not using any more" and shelves them. It never deletes: archiving keeps the name, the range and the ports, and the project drops out of the list only.
+
+The signal is filesystem-based, because the database has no history to answer from. `activity.rs` takes the most recent of the directory mtime and the mtime of `.git/logs/HEAD` (the reflog). Neither works alone: `.git/HEAD` only moves on checkout (it reported 57 days for a repo committed to that morning), and the directory misses work done deeper in the tree (99 days for a repo whose last commit was 17 days old). Measured against `git log -1` over 25 real repositories the pair agreed every time, so the reflog is read by mtime and never parsed.
+
+Two rules keep the result safe to act on: a project with a port listening right now is never a candidate, whatever its age, and a project with no recorded path is never a candidate either, because silence is not evidence. A path that no longer exists is reported apart from inactivity - the usual cause is a moved folder, where the fix is `update_project` with the new path rather than archiving.
+
+Archiving is reversible in two ways: explicitly (`portsage unarchive`, the button in the project header) and implicitly - `list_with_status` un-archives any project whose port is listening again, so "archived but running" cannot persist.
+
+Surfaces: `portsage prune [--days N] [--apply]` (reports by default), the Prune row in the sidebar, and the read-only `list_stale` MCP tool. Archiving is deliberately absent from the MCP surface: an agent should report the list, not sweep the registry.
+
 ## Undoing a deletion
 
 `release` and `remove` archive what they delete into the `trash` table instead of dropping it, and `Database::new` purges entries older than 30 days on open. See [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) for the table, the payload shape, and why this is an archive rather than a `deleted_at` column.
 
-Surfaces: Settings > Data > Trash in the app, `portsage trash list|restore|purge` on the CLI, and the `list_trash` / `restore_trash` MCP tools (an agent can undo its own mistaken `release_project`, but cannot purge).
+Surfaces: the Trash row in the sidebar (which only appears when the trash holds something, so it is discoverable at the moment it matters and invisible otherwise), `portsage trash list|restore|purge` on the CLI, and the `list_trash` / `restore_trash` MCP tools (an agent can undo its own mistaken `release_project`, but cannot purge).
+
+Deletions also return the id of the trash entry they created, which is what lets the UI put an **Undo** button straight into the toast. Noticing the mistake immediately is the common case; the trash view is for noticing it tomorrow.
 
 A restored project comes back with its original range, which is the point: the range of a deleted project is never recycled, so the `.env` and compose files still pointing at those ports keep working.
 

@@ -1,5 +1,14 @@
 import { useState, useEffect } from "react";
-import { Plus, Settings, Plug, AlertTriangle } from "lucide-react";
+import {
+  Plus,
+  Settings,
+  Plug,
+  AlertTriangle,
+  Trash2,
+  ChevronRight,
+  ChevronDown,
+  Sparkles,
+} from "lucide-react";
 import { UISearch } from "@/components/ui/UISearch";
 import { UIButton } from "@/components/ui/UIButton";
 import { UIText } from "@/components/ui/UIText";
@@ -17,7 +26,7 @@ import type {
   UnmanagedPort,
 } from "@/lib/types";
 
-type View = "project" | "unmanaged" | "settings";
+type View = "project" | "unmanaged" | "settings" | "trash" | "prune";
 
 type SettingsTab = "general" | "integrations" | "data" | "backends";
 
@@ -30,6 +39,12 @@ interface SidebarProps {
   onCreate: (name: string, path?: string) => void;
   onShowSettings: (tab?: SettingsTab) => void;
   onShowUnmanaged: () => void;
+  onShowTrash: () => void;
+  onShowPrune: () => void;
+  /** Entries currently in the trash. The row hides itself when this is 0. */
+  trashCount: number;
+  /** Projects that look abandoned, for the prune row. */
+  staleCount: number;
   backendTarget: BackendTarget | null;
   remoteBackends: RemoteBackend[];
   tunnels: Record<string, TunnelState>;
@@ -45,6 +60,10 @@ export function Sidebar({
   onCreate,
   onShowSettings,
   onShowUnmanaged,
+  onShowTrash,
+  onShowPrune,
+  trashCount,
+  staleCount,
   backendTarget,
   remoteBackends,
   tunnels,
@@ -53,14 +72,19 @@ export function Sidebar({
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [mcpInstalled, setMcpInstalled] = useState(true);
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     cmd.checkMcpInstalled().then(setMcpInstalled).catch(() => setMcpInstalled(false));
   }, [activeView]);
 
-  const filtered = projects.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const matches = (p: ProjectStatus) =>
+    p.name.toLowerCase().includes(search.toLowerCase());
+  // Archived projects live in their own collapsed section rather than in
+  // Settings: out of the way, but still visible enough that nobody forgets
+  // their names and ranges are still taken.
+  const filtered = projects.filter((p) => !p.archived_at && matches(p));
+  const archived = projects.filter((p) => p.archived_at && matches(p));
 
   return (
     <aside
@@ -166,6 +190,65 @@ export function Sidebar({
           );
         })}
 
+        {archived.length > 0 && (
+          <>
+            <UIDivider className="my-[var(--spacing-2)]" />
+            <button
+              onClick={() => setShowArchived(!showArchived)}
+              aria-expanded={showArchived}
+              className="
+                w-full flex items-center justify-between
+                px-[var(--spacing-2)] py-[var(--spacing-2)]
+                rounded-[var(--radius-sm)]
+                text-left cursor-pointer transition-colors duration-150
+                border border-transparent hover:bg-bg-elevated
+                focus-visible:outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
+              "
+            >
+              <div className="flex items-center gap-[var(--spacing-1)]">
+                {showArchived ? (
+                  <ChevronDown size={12} className="text-text-muted" />
+                ) : (
+                  <ChevronRight size={12} className="text-text-muted" />
+                )}
+                <UIText variant="body" className="text-[12px] text-text-secondary!">
+                  Archived
+                </UIText>
+              </div>
+              <UIBadge variant="inactive">{archived.length}</UIBadge>
+            </button>
+            {showArchived &&
+              archived.map((project) => {
+                const isSelected = project.id === selectedId && activeView === "project";
+                return (
+                  <button
+                    key={project.id}
+                    onClick={() => onSelect(project)}
+                    aria-current={isSelected ? "page" : undefined}
+                    className={`
+                      w-full flex items-center gap-[var(--spacing-2)]
+                      pl-[var(--spacing-4)] pr-[var(--spacing-2)] py-[var(--spacing-2)]
+                      rounded-[var(--radius-sm)]
+                      text-left cursor-pointer transition-colors duration-150
+                      focus-visible:outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
+                      ${isSelected
+                        ? "bg-bg-elevated border border-accent-amber/30"
+                        : "border border-transparent hover:bg-bg-elevated"
+                      }
+                    `}
+                  >
+                    <UIText
+                      variant="section"
+                      className="truncate text-[12px] text-text-muted!"
+                    >
+                      {project.name}
+                    </UIText>
+                  </button>
+                );
+              })}
+          </>
+        )}
+
         {unmanagedPorts.length > 0 && (
           <>
             <UIDivider className="my-[var(--spacing-2)]" />
@@ -195,6 +278,64 @@ export function Sidebar({
               <UIBadge variant="inactive">{unmanagedPorts.length}</UIBadge>
             </button>
           </>
+        )}
+
+        {staleCount > 0 && (
+          <button
+            onClick={onShowPrune}
+            className={`
+              w-full flex items-center justify-between
+              px-[var(--spacing-2)] py-[var(--spacing-2)] mt-[var(--spacing-1)]
+              rounded-[var(--radius-sm)]
+              text-left cursor-pointer transition-colors duration-150
+              focus-visible:outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
+              ${activeView === "prune"
+                ? "bg-bg-elevated border border-accent-amber/30"
+                : "border border-transparent hover:bg-bg-elevated"
+              }
+            `}
+          >
+            <div className="flex items-center gap-[var(--spacing-1)]">
+              <Sparkles size={12} className="text-text-muted" />
+              <UIText
+                variant="body"
+                className={`text-[12px] ${activeView === "prune" ? "text-accent-amber!" : "text-text-secondary!"}`}
+              >
+                Prune
+              </UIText>
+            </div>
+            <UIBadge variant="inactive">{staleCount}</UIBadge>
+          </button>
+        )}
+
+        {/* The trash only earns a row once it holds something: a permanent
+            empty bin is noise, and a hidden one is never found when needed. */}
+        {trashCount > 0 && (
+          <button
+            onClick={onShowTrash}
+            className={`
+              w-full flex items-center justify-between
+              px-[var(--spacing-2)] py-[var(--spacing-2)] mt-[var(--spacing-1)]
+              rounded-[var(--radius-sm)]
+              text-left cursor-pointer transition-colors duration-150
+              focus-visible:outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber
+              ${activeView === "trash"
+                ? "bg-bg-elevated border border-accent-amber/30"
+                : "border border-transparent hover:bg-bg-elevated"
+              }
+            `}
+          >
+            <div className="flex items-center gap-[var(--spacing-1)]">
+              <Trash2 size={12} className="text-text-muted" />
+              <UIText
+                variant="body"
+                className={`text-[12px] ${activeView === "trash" ? "text-accent-amber!" : "text-text-secondary!"}`}
+              >
+                Trash
+              </UIText>
+            </div>
+            <UIBadge variant="inactive">{trashCount}</UIBadge>
+          </button>
         )}
       </nav>
 

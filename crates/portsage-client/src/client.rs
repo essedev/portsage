@@ -1,6 +1,6 @@
 use crate::types::{
     ActivePort, ConfigSnapshot, KillEntry, KillOutcome, PortStatus, ProjectStatus, RangeBounds,
-    RemoteBackend, RestoreOutcome, TrashEntry,
+    RemoteBackend, RestoreOutcome, StaleProject, TrashEntry,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
@@ -190,20 +190,23 @@ impl Client {
         }))
     }
 
-    pub fn remove_port(&self, project: &str, service: &str) -> Result<(), ClientError> {
-        let _: serde_json::Value = self.call(json!({
+    pub fn remove_port(&self, project: &str, service: &str) -> Result<Option<i64>, ClientError> {
+        let result: serde_json::Value = self.call(json!({
             "method": "remove_port",
             "params": { "project": project, "service": service },
         }))?;
-        Ok(())
+        Ok(trash_id_of(&result))
     }
 
-    pub fn release_project(&self, name: &str) -> Result<(), ClientError> {
-        let _: serde_json::Value = self.call(json!({
+    /// Returns the id of the trash entry produced by the release, when the
+    /// backend reports one. Older backends answer `"ok"`, which reads as
+    /// `None` rather than an error.
+    pub fn release_project(&self, name: &str) -> Result<Option<i64>, ClientError> {
+        let result: serde_json::Value = self.call(json!({
             "method": "release_project",
             "params": { "name": name },
         }))?;
-        Ok(())
+        Ok(trash_id_of(&result))
     }
 
     pub fn scan_active(&self) -> Result<Vec<ActivePort>, ClientError> {
@@ -245,6 +248,35 @@ impl Client {
     pub fn kill_project(&self, name: &str) -> Result<Vec<KillEntry>, ClientError> {
         self.call(json!({
             "method": "kill_project",
+            "params": { "name": name },
+        }))
+    }
+
+    /// Projects that look abandoned. Read-only: nothing is archived or
+    /// deleted until the caller says so.
+    pub fn list_stale(&self, days: Option<i64>) -> Result<Vec<StaleProject>, ClientError> {
+        let params = match days {
+            Some(d) => json!({ "days": d }),
+            None => json!({}),
+        };
+        self.call(json!({
+            "method": "list_stale",
+            "params": params,
+        }))
+    }
+
+    pub fn set_project_archived(
+        &self,
+        name: &str,
+        archived: bool,
+    ) -> Result<ProjectStatus, ClientError> {
+        let method = if archived {
+            "archive_project"
+        } else {
+            "unarchive_project"
+        };
+        self.call(json!({
+            "method": method,
             "params": { "name": name },
         }))
     }
@@ -324,6 +356,12 @@ impl Client {
 }
 
 // --- autospawn helpers ---
+
+/// Pull `trash_id` out of a deletion response. Backends older than the trash
+/// feature answer with the string `"ok"`, so a missing field is not an error.
+fn trash_id_of(result: &Value) -> Option<i64> {
+    result.get("trash_id").and_then(|v| v.as_i64())
+}
 
 fn map_connect_error(err: std::io::Error) -> ClientError {
     match err.kind() {

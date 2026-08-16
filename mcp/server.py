@@ -187,6 +187,21 @@ def release_project(project_name: str) -> str:
 
 
 @mcp.tool()
+def list_stale(days: int = 90) -> str:
+    """List projects that look abandoned: their directory is gone, or nothing
+    has touched it (or its git reflog) for `days` days.
+
+    Read-only, and projects with a port listening right now are never
+    included. Archiving is deliberately not exposed here: report the list to
+    the user and let them run `portsage prune --apply`.
+
+    Args:
+        days: Inactivity threshold in days (default 90)
+    """
+    return json.dumps(_send("list_stale", {"days": days}), indent=2)
+
+
+@mcp.tool()
 def list_trash() -> str:
     """List deleted projects and ports that can still be restored.
 

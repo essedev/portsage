@@ -207,8 +207,15 @@ fn cmd_list(
     here: bool,
     project: Option<String>,
     active_only: bool,
+    include_archived: bool,
 ) -> Result<(), CliError> {
     let mut projects = client.list_all()?;
+
+    // Archived projects are shelved, not deleted: they stay out of the way
+    // until asked for, or until named explicitly.
+    if !include_archived && project.is_none() {
+        projects.retain(|p| p.archived_at.is_none());
+    }
 
     if here {
         let cwd = pwd();
@@ -416,6 +423,58 @@ fn cmd_config(client: &Client, mode: OutputMode, action: ConfigAction) -> Result
             Ok(())
         }
     }
+}
+
+fn cmd_prune(
+    client: &Client,
+    mode: OutputMode,
+    days: i64,
+    apply: bool,
+    yes: bool,
+) -> Result<(), CliError> {
+    let candidates = client.list_stale(Some(days))?;
+    output::print_stale(mode, &candidates, days, !apply)?;
+    if candidates.is_empty() || !apply {
+        return Ok(());
+    }
+    confirm(&format!("archive {} project(s)?", candidates.len()), yes)?;
+    // Archiving is reversible and per-project, so one failure must not stop
+    // the rest: report what went wrong and carry on.
+    let mut archived = 0;
+    for c in &candidates {
+        match client.set_project_archived(&c.name, true) {
+            Ok(_) => archived += 1,
+            Err(e) => output::print_error(&format!("{}: {e}", c.name))?,
+        }
+    }
+    output::print_message(
+        mode,
+        &format!(
+            "archived {archived} project{}",
+            if archived == 1 { "" } else { "s" }
+        ),
+    )?;
+    Ok(())
+}
+
+fn cmd_set_archived(
+    client: &Client,
+    mode: OutputMode,
+    name: String,
+    archived: bool,
+) -> Result<(), CliError> {
+    let project = client.set_project_archived(&name, archived)?;
+    output::print_message(
+        mode,
+        &format!(
+            "{} {} (range {}-{} still reserved)",
+            if archived { "archived" } else { "restored" },
+            project.name,
+            project.range_start,
+            project.range_end
+        ),
+    )?;
+    Ok(())
 }
 
 fn cmd_trash(
@@ -773,7 +832,8 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
             here,
             project,
             active,
-        } => cmd_list(&client, mode, here, project, active),
+            archived,
+        } => cmd_list(&client, mode, here, project, active, archived),
         Command::Status => cmd_status(&client, mode),
         Command::Reserve { name, path, here } => cmd_reserve(&client, mode, name, path, here),
         Command::Register {
@@ -802,6 +862,9 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
             here,
         } => cmd_open(&client, mode, target, project, here),
         Command::Config { action } => cmd_config(&client, mode, action),
+        Command::Prune { days, apply } => cmd_prune(&client, mode, days, apply, yes),
+        Command::Archive { name } => cmd_set_archived(&client, mode, name, true),
+        Command::Unarchive { name } => cmd_set_archived(&client, mode, name, false),
         Command::Trash { action } => cmd_trash(&client, mode, action, yes),
         Command::Doctor => cmd_doctor(&cli.global, mode),
         // Handled above before the client is built. Unreachable in practice.
@@ -943,6 +1006,7 @@ mod tests {
                 here: false,
                 project: None,
                 active: false,
+                archived: false,
             },
         };
         let result = run(cli);
@@ -1034,6 +1098,7 @@ mod tests {
                 here: false,
                 project: None,
                 active: false,
+                archived: false,
             },
         };
         let err = run(cli).unwrap_err();

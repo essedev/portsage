@@ -150,6 +150,7 @@ pub(crate) async fn handle_request(db: &Database, line: &str) -> Value {
                         range_start: project.range_start,
                         range_end: project.range_end,
                         created_at: project.created_at,
+                        archived_at: project.archived_at,
                         ports: Vec::new(),
                     };
                     json!({ "result": ps })
@@ -212,8 +213,11 @@ pub(crate) async fn handle_request(db: &Database, line: &str) -> Value {
                 Some(p) => p,
                 None => return json!({"error": format!("project '{}' not found", name)}),
             };
+            // `trash_id` lets a client offer an immediate undo. Kept
+            // alongside "ok" so older clients, which only check for the
+            // absence of "error", keep working.
             match db.delete_project(project.project.id) {
-                Ok(_) => json!({"result": "ok"}),
+                Ok(trash_id) => json!({"result": {"status": "ok", "trash_id": trash_id}}),
                 Err(e) => json!({"error": e.to_string()}),
             }
         }
@@ -228,7 +232,7 @@ pub(crate) async fn handle_request(db: &Database, line: &str) -> Value {
                 None => return json!({"error": "missing params.service"}),
             };
             match actions::remove_port_by_service(db, project_name, service) {
-                Ok(()) => json!({"result": "ok"}),
+                Ok(trash_id) => json!({"result": {"status": "ok", "trash_id": trash_id}}),
                 Err(e) => json!({"error": e}),
             }
         }
@@ -343,6 +347,30 @@ pub(crate) async fn handle_request(db: &Database, line: &str) -> Value {
             let new_name = params["new_name"].as_str();
             let new_path = params["new_path"].as_str();
             match actions::update_project(db, current, new_name, new_path) {
+                Ok(ps) => json!({ "result": ps }),
+                Err(e) => json!({ "error": e }),
+            }
+        }
+
+        // Prune support: read-only survey of what looks abandoned. The
+        // caller decides what to archive; nothing here mutates.
+        "list_stale" => {
+            let days = params["days"]
+                .as_i64()
+                .unwrap_or(actions::DEFAULT_STALE_DAYS);
+            match actions::list_stale(db, days) {
+                Ok(entries) => json!({ "result": entries }),
+                Err(e) => json!({ "error": e }),
+            }
+        }
+
+        "archive_project" | "unarchive_project" => {
+            let name = match params["name"].as_str() {
+                Some(n) => n,
+                None => return json!({"error": "missing params.name"}),
+            };
+            let archived = method == "archive_project";
+            match actions::set_project_archived(db, name, archived) {
                 Ok(ps) => json!({ "result": ps }),
                 Err(e) => json!({ "error": e }),
             }
@@ -591,7 +619,10 @@ mod tests {
             r#"{"method":"release_project","params":{"name":"test"}}"#,
         )
         .await;
-        assert_eq!(res["result"], "ok");
+        assert_eq!(res["result"]["status"], "ok");
+        // The response carries the trash row the release produced, which is
+        // what lets a client offer an undo without hunting for it.
+        assert!(res["result"]["trash_id"].as_i64().is_some());
         let list = req(&db, r#"{"method":"list_all"}"#).await;
         assert!(list["result"].as_array().unwrap().is_empty());
     }
@@ -626,7 +657,8 @@ mod tests {
             r#"{"method":"remove_port","params":{"project":"alpha","service":"vite"}}"#,
         )
         .await;
-        assert_eq!(res["result"], "ok");
+        assert_eq!(res["result"]["status"], "ok");
+        assert!(res["result"]["trash_id"].as_i64().is_some());
         let list = req(&db, r#"{"method":"list_all"}"#).await;
         let ports = list["result"][0]["ports"].as_array().unwrap();
         assert!(ports.is_empty());
@@ -1130,7 +1162,7 @@ mod tests {
             r#"{"method":"release_project","params":{"name":"myapp"}}"#,
         )
         .await;
-        assert_eq!(res["result"], "ok");
+        assert_eq!(res["result"]["status"], "ok");
 
         let res = req(&db, r#"{"method":"list_all"}"#).await;
         assert!(res["result"].as_array().unwrap().is_empty());

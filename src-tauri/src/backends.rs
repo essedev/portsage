@@ -29,7 +29,7 @@ use crate::db::{Database, RemoteBackend, RemoteBackendInput};
 use crate::paths;
 use portsage_client::{
     ActivePort, Client, ConfigSnapshot, KillEntry, KillOutcome, PortStatus, ProjectStatus,
-    RangeBounds, RestoreOutcome, TrashEntry,
+    RangeBounds, RestoreOutcome, StaleProject, TrashEntry,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -461,6 +461,7 @@ impl BackendClient {
                     range_start: p.range_start,
                     range_end: p.range_end,
                     created_at: p.created_at,
+                    archived_at: p.archived_at,
                     ports: Vec::new(),
                 })
             }
@@ -517,14 +518,17 @@ impl BackendClient {
         }
     }
 
-    pub fn remove_port(&self, project: &str, service: &str) -> Result<(), String> {
+    /// Both deletions return the id of the trash entry they produced (when
+    /// there was something to delete), which is what powers the undo in the
+    /// toast: no guessing at "the most recent entry".
+    pub fn remove_port(&self, project: &str, service: &str) -> Result<Option<i64>, String> {
         match self {
             BackendClient::Local(db) => actions::remove_port_by_service(db, project, service),
             BackendClient::Remote(c) => c.remove_port(project, service).map_err(|e| e.to_string()),
         }
     }
 
-    pub fn release_project(&self, name: &str) -> Result<(), String> {
+    pub fn release_project(&self, name: &str) -> Result<Option<i64>, String> {
         match self {
             BackendClient::Local(db) => {
                 let projects = db.list_projects().map_err(|e| e.to_string())?;
@@ -536,6 +540,30 @@ impl BackendClient {
                     .map_err(|e| e.to_string())
             }
             BackendClient::Remote(c) => c.release_project(name).map_err(|e| e.to_string()),
+        }
+    }
+
+    pub fn list_stale(&self, days: Option<i64>) -> Result<Vec<StaleProject>, String> {
+        match self {
+            BackendClient::Local(db) => {
+                actions::list_stale(db, days.unwrap_or(actions::DEFAULT_STALE_DAYS))
+            }
+            // Staleness is computed from the filesystem, so a remote backend
+            // has to answer for its own disk.
+            BackendClient::Remote(c) => c.list_stale(days).map_err(|e| e.to_string()),
+        }
+    }
+
+    pub fn set_project_archived(
+        &self,
+        name: &str,
+        archived: bool,
+    ) -> Result<ProjectStatus, String> {
+        match self {
+            BackendClient::Local(db) => actions::set_project_archived(db, name, archived),
+            BackendClient::Remote(c) => c
+                .set_project_archived(name, archived)
+                .map_err(|e| e.to_string()),
         }
     }
 

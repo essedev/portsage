@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { Trash2, FolderOpen, Terminal, Plus, Power, Pencil } from "lucide-react";
+import {
+  Trash2,
+  FolderOpen,
+  Terminal,
+  Plus,
+  Power,
+  Pencil,
+  Archive,
+  ArchiveRestore,
+} from "lucide-react";
 import { useConfirm } from "@/lib/dialog";
 import { useToast } from "@/lib/toast";
 import { UIText } from "@/components/ui/UIText";
@@ -33,6 +42,8 @@ interface ProjectDetailProps {
     newName?: string,
     newPath?: string,
   ) => Promise<boolean>;
+  /** Shelve or unshelve the project. Range and ports are kept either way. */
+  onSetArchived: (name: string, archived: boolean) => void;
   onAddPort: (projectName: string, service: string, port: number) => void;
   onRemovePort: (projectName: string, service: string) => void;
   onKillPort: (port: number) => Promise<KillOutcome | null>;
@@ -51,6 +62,7 @@ export function ProjectDetail({
   project,
   onDelete,
   onUpdate,
+  onSetArchived,
   onAddPort,
   onRemovePort,
   onKillPort,
@@ -84,10 +96,12 @@ export function ProjectDetail({
 
   const handleDelete = async () => {
     const portsCount = project.ports.length;
+    // The trash keeps it for 30 days, so promising the opposite would be a
+    // lie that pushes people away from a reversible action.
     const message =
       portsCount > 0
-        ? `Delete project "${project.name}" and its ${portsCount} registered port${portsCount === 1 ? "" : "s"}? This cannot be undone.`
-        : `Delete project "${project.name}"? This cannot be undone.`;
+        ? `Delete project "${project.name}" and its ${portsCount} registered port${portsCount === 1 ? "" : "s"}? It goes to the trash and can be restored for 30 days.`
+        : `Delete project "${project.name}"? It goes to the trash and can be restored for 30 days.`;
     const ok = await confirm({
       title: "Delete project",
       message,
@@ -187,6 +201,23 @@ export function ProjectDetail({
               onClick={() => setEditing(true)}
             >
               <Pencil size={16} aria-hidden="true" />
+            </UIButton>
+            <UIButton
+              variant="ghost"
+              size="icon"
+              title={
+                project.archived_at
+                  ? "Bring back into the list"
+                  : "Archive: keeps range and ports, hides it from the list"
+              }
+              aria-label={project.archived_at ? "Unarchive project" : "Archive project"}
+              onClick={() => onSetArchived(project.name, !project.archived_at)}
+            >
+              {project.archived_at ? (
+                <ArchiveRestore size={16} aria-hidden="true" />
+              ) : (
+                <Archive size={16} aria-hidden="true" />
+              )}
             </UIButton>
             {project.path && !isRemote && (
               <>

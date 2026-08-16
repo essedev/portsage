@@ -46,6 +46,8 @@ src/
     SettingsPanel.tsx
     RemoteBackendsPanel.tsx # Settings tab: remote backend CRUD, auto-forward toggle, excluded ports
     UnmanagedPortsPanel.tsx
+    TrashPanel.tsx          # Sidebar view: restore or purge deleted projects and ports
+    PrunePanel.tsx          # Sidebar view: shelve projects whose folder is gone or long idle
     AddProjectForm.tsx
     AddPortForm.tsx
     EditProjectForm.tsx     # Inline rename / change-path form in ProjectDetail
@@ -66,6 +68,7 @@ src-tauri/
     actions.rs        # pure logic shared by commands.rs and socket.rs (no Tauri deps)
     commands.rs       # Thin Tauri wrappers over actions::* and backends::*
     scanner.rs        # Port scanner (macOS lsof + ps, Linux /proc + ss fallback)
+    activity.rs       # Filesystem staleness signals behind `prune` (dir mtime + .git/logs/HEAD)
     socket.rs         # Unix socket server (async), dispatches the wire protocol
     backends.rs       # Multi-host: BackendTarget, BackendManager, SshTunnel, BackendRouter, BackendClient (no Tauri deps)
     forwards.rs       # Phase 3 multi-host: ForwardManager, ForwardController, local-port collision probe, ControlMaster ownership (no Tauri deps)
@@ -113,7 +116,9 @@ scripts/
 - Tauri code is feature-gated behind the `gui` feature (default). The Linux server build runs with `--no-default-features` and drops the entire Tauri toolchain
 - Typed errors, no unwrap() in production
 - Wire types (PortStatus, ProjectStatus, ActivePort, KillOutcome, KillEntry, RangeBounds, ConfigSnapshot, TrashEntry, RestoreOutcome) are defined in `crates/portsage-client/src/types.rs` and re-exported from actions.rs and scanner.rs - never duplicate them
-- Deletions are hard, but `delete_project` / `remove_port` archive a JSON snapshot into the `trash` table in the same transaction. Adding a field to `projects` / `ports` means updating `db.rs::TrashPayload` and bumping `TRASH_PAYLOAD_VERSION`. The global "always soft delete" rule does not apply here and DATABASE_SCHEMA.md says why
+- Deletions are hard, but `delete_project` / `remove_port` archive a JSON snapshot into the `trash` table in the same transaction and return its id (that id is what powers the Undo in the toast). Adding a field to `projects` / `ports` means updating `db.rs::TrashPayload` and bumping `TRASH_PAYLOAD_VERSION`. The global "always soft delete" rule does not apply here and DATABASE_SCHEMA.md says why
+- `archived_at` on `projects` is not a soft delete: an archived project keeps its name, range and ports and stays subject to every constraint. It only drops out of the default listing, so a forgotten filter shows a row too many, never corrupts state. New columns go through `db.rs::add_column_if_missing`, since `CREATE TABLE IF NOT EXISTS` never alters an existing table
+- Staleness comes from `activity.rs`: the newest of the directory mtime and `.git/logs/HEAD` (the reflog). Neither works alone - `.git/HEAD` only moves on checkout, and the directory misses work done deeper in the tree
 - Shelling out to a tool the user installed (docker, ssh, ...) must resolve the binary explicitly: an app bundle launched by launchd only has `PATH=/usr/bin:/bin:/usr/sbin:/sbin`. See `actions::resolve_docker_bin`
 
 ### MCP server

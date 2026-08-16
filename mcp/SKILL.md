@@ -40,6 +40,15 @@ its UI: read state, mutate state, and act on live ports (kill / open).
 - **release_project(project_name)** - releases the whole range.
 - **set_config(key, value)** - only `base_port` and `range_size` are accepted.
 
+### Prune abandoned projects
+
+- **list_stale(days=90)** - projects whose directory is gone, or untouched for
+  that many days. Never includes a project with a port listening right now.
+  Read-only: report the list and let the user run `portsage prune --apply`,
+  which archives them (range and ports kept, `portsage unarchive` brings them
+  back). A missing directory is often a move, so suggest `update_project` with
+  the new path before suggesting the prune.
+
 ### Undo a deletion
 
 Deleted projects and ports are archived for 30 days, not dropped.

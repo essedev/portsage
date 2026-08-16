@@ -106,6 +106,13 @@ This roadmap entry subsumes the Linux support that was listed in v0.7. Windows s
 - [x] CLI `--backend <name>` / `PORTSAGE_BACKEND` env (delegates tunnel lifecycle to the Mac app).
 - [ ] Phase 4 (not started): project migration between backends, health dashboard, CLI `portsage backends list / add / remove`, Tailscale host auto-discovery.
 
+## v0.14 - Recover and prune (shipped: v0.14.0)
+
+- [x] **Trash**: `release` and `remove` archive a snapshot for 30 days instead of dropping it. Restoring a project brings back its original range, so its `.env` and compose files keep working. Sidebar row that appears only when the trash is non-empty, `portsage trash list|restore|purge`, `list_trash` / `restore_trash` MCP tools, and an Undo button in the toast right after a deletion.
+- [x] **Prune**: projects whose folder is gone or untouched for N days (default 90) can be archived in one pass. Archiving keeps name, range and ports; a project un-archives itself when one of its ports starts listening. Signal is `max(dir mtime, .git/logs/HEAD mtime)`, validated against `git log -1` on 25 real repos. Sidebar "Prune" row + "Archived" section, `portsage prune|archive|unarchive`, read-only `list_stale` MCP tool.
+- [x] **Docker kill fixed**: the docker CLI is resolved explicitly, because an app bundle launched by launchd has no docker on its PATH. `KillOutcome` now distinguishes CLI missing / daemon down / no container / stop failed.
+- Deliberately not done: recycling the ranges of released projects. Numbers are not scarce (27 projects reach 4340 of 65535) and reusing a range would point an old `.env` at another project's service.
+
 ## v0.12 - CLI-driven MCP install + self-update (shipped: v0.12.0)
 
 - [x] **`portsage mcp install / uninstall / status`** - canonical install path, works without the GUI running. The four MCP source files (`server.py`, `pyproject.toml`, `uv.lock`, `SKILL.md`) are embedded into the CLI binary via `include_str!` so a Linux tarball install has no missing files. The install extracts them to `<data_dir>/portsage/mcp/` (Linux: `~/.local/share/portsage/mcp/`, macOS: `~/Library/Application Support/portsage/mcp/`), runs `uv sync`, registers in `~/.claude.json` (or `./.mcp.json` with `--project`), copies the SKILL.md, and adds the 14 tool entries to `~/.claude/settings.json`. All JSON edits go through a parse-or-bail + atomic-tmp-then-rename helper so a corrupt `~/.claude.json` is never silently overwritten. Tests cover round-tripping a synthetic config and ensuring sibling entries are preserved.

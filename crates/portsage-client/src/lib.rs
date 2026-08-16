@@ -12,7 +12,7 @@ pub use client::{
 };
 pub use types::{
     ActivePort, ConfigSnapshot, KillEntry, KillOutcome, PortStatus, ProjectStatus, RangeBounds,
-    RemoteBackend, RestoreOutcome, TrashEntry, TrashKind,
+    RemoteBackend, RestoreOutcome, StaleProject, StaleReason, TrashEntry, TrashKind,
 };
 
 use std::path::PathBuf;

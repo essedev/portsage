@@ -9,7 +9,7 @@ export function useProjects() {
   const [projects, setProjects] = useState<ProjectStatus[]>([]);
   const [unmanagedPorts, setUnmanagedPorts] = useState<UnmanagedPort[]>([]);
   const [loading, setLoading] = useState(true);
-  const { showError } = useToast();
+  const { showError, showSuccess } = useToast();
 
   const refresh = useCallback(async () => {
     try {
@@ -51,7 +51,41 @@ export function useProjects() {
   const create = (name: string, path?: string) =>
     run(() => cmd.createProject(name, path));
 
-  const remove = (name: string) => run(() => cmd.deleteProject(name));
+  // Deletions are archived, so the useful moment to offer the undo is right
+  // now, in the toast: noticing the mistake immediately is the common case,
+  // and it saves a trip to the trash view.
+  const runDeletion = async (
+    what: string,
+    fn: () => Promise<number | null>,
+  ): Promise<boolean> => {
+    try {
+      const trashId = await fn();
+      await refresh();
+      if (trashId === null) {
+        showSuccess(`${what} removed`);
+        return true;
+      }
+      showSuccess(`${what} removed`, {
+        label: "Undo",
+        onClick: () => {
+          void cmd
+            .restoreTrash(trashId)
+            .then(refresh)
+            .catch((err) => showError(humanizeError(err)));
+        },
+      });
+      return true;
+    } catch (err) {
+      showError(humanizeError(err));
+      return false;
+    }
+  };
+
+  const remove = (name: string) =>
+    runDeletion(name, () => cmd.deleteProject(name));
+
+  const setArchived = (name: string, archived: boolean) =>
+    run(() => cmd.setProjectArchived(name, archived));
 
   const update = (currentName: string, newName?: string, newPath?: string) =>
     run(() => cmd.updateProject(currentName, newName, newPath));
@@ -60,7 +94,9 @@ export function useProjects() {
     run(() => cmd.addPort(projectName, service, port));
 
   const removePort = (projectName: string, service: string) =>
-    run(() => cmd.removePort(projectName, service));
+    runDeletion(`${projectName} / ${service}`, () =>
+      cmd.removePort(projectName, service),
+    );
 
   // Kill helpers don't go through `run`: callers need the KillOutcome to
   // decide whether to surface "permission denied" or "process already gone"
@@ -99,6 +135,7 @@ export function useProjects() {
     update,
     addPort,
     removePort,
+    setArchived,
     killPort,
     killProject,
   };

@@ -1,7 +1,7 @@
 use anstyle::{AnsiColor, Color, Style};
 use portsage_client::{
-    ActivePort, KillEntry, KillOutcome, PortStatus, ProjectStatus, RestoreOutcome, TrashEntry,
-    TrashKind,
+    ActivePort, KillEntry, KillOutcome, PortStatus, ProjectStatus, RestoreOutcome, StaleProject,
+    StaleReason, TrashEntry, TrashKind,
 };
 use std::io::{self, Write};
 
@@ -85,19 +85,28 @@ pub fn print_projects(mode: OutputMode, projects: &[ProjectStatus]) -> io::Resul
                 name_w = name_w,
                 path_w = path_w,
             )?;
+            let d = dim();
             for p in projects {
                 let active = p.ports.iter().filter(|x| x.active).count();
                 let total = p.ports.len();
                 let count = format!("{}/{}", active, total);
+                // Archived rows only show up when explicitly asked for, so
+                // they have to be recognisable once they do.
+                let shelved = if p.archived_at.is_some() {
+                    format!("  {d}archived{d:#}")
+                } else {
+                    String::new()
+                };
                 writeln!(
                     out,
-                    "{:<4} {:<name_w$}  {:>5}-{:<5}  {:<path_w$}  {}",
+                    "{:<4} {:<name_w$}  {:>5}-{:<5}  {:<path_w$}  {}{}",
                     p.id,
                     p.name,
                     p.range_start,
                     p.range_end,
                     p.path.as_deref().unwrap_or("-"),
                     count,
+                    shelved,
                     name_w = name_w,
                     path_w = path_w,
                 )?;
@@ -274,6 +283,104 @@ pub fn print_json<T: serde::Serialize>(value: T) -> io::Result<()> {
         .unwrap_or_else(|e| format!(r#"{{"error":"serialize failed: {e}"}}"#));
     writeln!(out, "{}", s)?;
     Ok(())
+}
+
+/// `dry_run` gates the closing hint: after `--apply` the "nothing changed"
+/// line would be a lie.
+pub fn print_stale(
+    mode: OutputMode,
+    entries: &[StaleProject],
+    days: i64,
+    dry_run: bool,
+) -> io::Result<()> {
+    match mode {
+        OutputMode::Json => print_json(entries),
+        OutputMode::Quiet => {
+            let mut out = anstream::stdout().lock();
+            for e in entries {
+                writeln!(
+                    out,
+                    "{}\t{}\t{}",
+                    e.name,
+                    stale_reason_label(e.reason),
+                    e.inactive_days.map(|d| d.to_string()).unwrap_or_default()
+                )?;
+            }
+            Ok(())
+        }
+        OutputMode::Human => {
+            let mut out = anstream::stdout().lock();
+            let d = dim();
+            if entries.is_empty() {
+                writeln!(
+                    out,
+                    "(nothing idle for {days}+ days; projects with a listening port are never listed)"
+                )?;
+                return Ok(());
+            }
+            let name_w = entries
+                .iter()
+                .map(|e| e.name.len())
+                .max()
+                .unwrap_or(4)
+                .max(4);
+            let b = bold();
+            writeln!(
+                out,
+                "{b}{:<name_w$}  {:<11}  {:<6}  WHY{b:#}",
+                "NAME",
+                "RANGE",
+                "PORTS",
+                name_w = name_w,
+            )?;
+            let mut missing = 0;
+            for e in entries {
+                let why = match e.reason {
+                    StaleReason::PathMissing => {
+                        missing += 1;
+                        format!("path is gone: {}", e.path.as_deref().unwrap_or("-"))
+                    }
+                    StaleReason::Inactive => {
+                        format!("untouched for {} days", e.inactive_days.unwrap_or(0))
+                    }
+                };
+                writeln!(
+                    out,
+                    "{:<name_w$}  {:>5}-{:<5}  {:<6}  {}",
+                    e.name,
+                    e.range_start,
+                    e.range_end,
+                    e.registered_ports,
+                    why,
+                    name_w = name_w,
+                )?;
+            }
+            if missing > 0 {
+                // A gone directory is often a move, not a deletion, and
+                // archiving would hide a project that is merely mislabelled.
+                writeln!(
+                    out,
+                    "{d}if one of those {missing} moved rather than went away, fix it with \
+                     `portsage rename <name> --path <new-path>`{d:#}"
+                )?;
+            }
+            if dry_run {
+                writeln!(
+                    out,
+                    "{d}nothing changed. `portsage prune --apply` archives these; they keep \
+                     their range and come back with `portsage unarchive <name>`{d:#}"
+                )?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn stale_reason_label(reason: StaleReason) -> &'static str {
+    match reason {
+        StaleReason::PathMissing => "path_missing",
+        StaleReason::Inactive => "inactive",
+    }
 }
 
 pub fn print_trash(mode: OutputMode, entries: &[TrashEntry]) -> io::Result<()> {

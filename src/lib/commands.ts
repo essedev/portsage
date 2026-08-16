@@ -12,6 +12,7 @@ import type {
   ForwardExclusion,
   TrashEntry,
   RestoreOutcome,
+  StaleProject,
 } from "./types";
 
 export function listProjects(): Promise<ProjectStatus[]> {
@@ -25,7 +26,11 @@ export function createProject(
   return invoke("create_project", { name, path });
 }
 
-export function deleteProject(name: string): Promise<void> {
+/**
+ * Release a project. Resolves to the id of the trash entry the release
+ * produced, which the caller can hand to `restoreTrash` for an undo.
+ */
+export function deleteProject(name: string): Promise<number | null> {
   return invoke("delete_project", { name });
 }
 
@@ -50,10 +55,11 @@ export function addPort(
   return invoke("add_port", { projectName, service, port });
 }
 
+/** Resolves to the id of the trash entry, as `deleteProject` does. */
 export function removePort(
   projectName: string,
   service: string,
-): Promise<void> {
+): Promise<number | null> {
   return invoke("remove_port", { projectName, service });
 }
 
@@ -92,6 +98,17 @@ export interface KillEntry {
 
 export function killProject(projectName: string): Promise<KillEntry[]> {
   return invoke("kill_project", { projectName });
+}
+
+export function listStale(days?: number): Promise<StaleProject[]> {
+  return invoke("list_stale", { days: days ?? null });
+}
+
+export function setProjectArchived(
+  name: string,
+  archived: boolean,
+): Promise<ProjectStatus> {
+  return invoke("set_project_archived", { name, archived });
 }
 
 export function listTrash(): Promise<TrashEntry[]> {

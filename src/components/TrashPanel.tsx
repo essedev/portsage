@@ -11,6 +11,8 @@ import type { TrashEntry } from "@/lib/types";
 interface TrashPanelProps {
   /** Called after a restore so the caller can refetch its project list. */
   onRestored?: () => void;
+  /** Called after any change to the entry count (restore, purge). */
+  onChanged?: () => void;
 }
 
 /**
@@ -18,7 +20,7 @@ interface TrashPanelProps {
  * archived for 30 days; the backend purges older entries when it opens the
  * database, so nothing here needs a timer.
  */
-export function TrashPanel({ onRestored }: TrashPanelProps) {
+export function TrashPanel({ onRestored, onChanged }: TrashPanelProps) {
   const [entries, setEntries] = useState<TrashEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const confirm = useConfirm();
@@ -56,6 +58,7 @@ export function TrashPanel({ onRestored }: TrashPanelProps) {
       }
       await refresh();
       onRestored?.();
+      onChanged?.();
     } catch (e) {
       showError(`${e}`);
     }
@@ -73,6 +76,7 @@ export function TrashPanel({ onRestored }: TrashPanelProps) {
     try {
       await cmd.purgeTrash(entry.id);
       await refresh();
+      onChanged?.();
     } catch (e) {
       showError(`${e}`);
     }
@@ -92,6 +96,7 @@ export function TrashPanel({ onRestored }: TrashPanelProps) {
     try {
       await cmd.purgeTrash();
       await refresh();
+      onChanged?.();
     } catch (e) {
       showError(`${e}`);
     }

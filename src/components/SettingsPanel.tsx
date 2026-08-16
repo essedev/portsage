@@ -6,7 +6,6 @@ import { UIDivider } from "@/components/ui/UIDivider";
 import { UIBadge } from "@/components/ui/UIBadge";
 import { UISelect } from "@/components/ui/UISelect";
 import { UITabs, UITabPanel } from "@/components/ui/UITabs";
-import { TrashPanel } from "@/components/TrashPanel";
 import { RemoteBackendsPanel } from "@/components/RemoteBackendsPanel";
 import type {
   BackendTarget,
@@ -142,9 +141,6 @@ interface SettingsPanelProps {
   tunnels?: Record<string, TunnelState>;
   backendTarget?: BackendTarget | null;
   onBackendsChanged?: () => void;
-  // Called when a restore puts projects or ports back, so the caller can
-  // refetch its project list instead of waiting for the polling tick.
-  onDataChanged?: () => void;
 }
 
 export function SettingsPanel({
@@ -154,7 +150,6 @@ export function SettingsPanel({
   tunnels = {},
   backendTarget = null,
   onBackendsChanged,
-  onDataChanged,
 }: SettingsPanelProps = {}) {
   const { showSuccess, showError } = useToast();
   const confirm = useConfirm();
@@ -556,10 +551,6 @@ export function SettingsPanel({
                 Import
               </UIButton>
             </div>
-
-            <UIDivider />
-
-            <TrashPanel onRestored={onDataChanged} />
           </div>
         </UITabPanel>
       </div>

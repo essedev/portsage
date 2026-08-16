@@ -7,13 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-08-16
+
 ### Added
-- Trash: releasing a project or removing a port now archives it for 30 days instead of dropping it. Restoring a project brings back its original range, path and ports, which is what makes the .env and compose files that point at those ports keep working. Surfaces: Settings > Data > Trash in the app, `portsage trash list|restore|purge [--all]` on the CLI, and the `list_trash` / `restore_trash` MCP tools (an agent can undo its own mistaken `release_project` but cannot purge). New `trash` table (see DATABASE_SCHEMA.md for the payload shape and why this is a snapshot archive rather than a `deleted_at` column) plus the `list_trash` / `restore_trash` / `purge_trash` socket methods
+- `prune`: review projects that look abandoned and shelve them. A project is a candidate when its folder is gone, or when nothing has touched the directory or its git reflog for N days (default 90). Anything with a port listening right now is never listed, and neither is a project with no recorded path. Archiving keeps the name, the range and the ports and only drops the project out of the list; it comes back with `portsage unarchive`, from the button in the project header, or on its own as soon as one of its ports starts listening again. Surfaces: `portsage prune [--days N] [--apply]`, `portsage archive|unarchive <name>`, `portsage list --archived`, an "Archived" section and a "Prune" row in the sidebar, and a read-only `list_stale` MCP tool
+- Undo in the toast: releasing a project or removing a port now offers an immediate Undo, because the deletion returns the id of the trash entry it created
+- Trash: releasing a project or removing a port now archives it for 30 days instead of dropping it. Restoring a project brings back its original range, path and ports, which is what makes the .env and compose files that point at those ports keep working. Surfaces: Settings > Data > Trash in the app, `portsage trash list|restore|purge [--all]` on the CLI, and the `list_trash` / `restore_trash` MCP tools (an agent can undo its own mistaken `release_project` but cannot purge). The trash lives in the sidebar and only appears when it holds something, rather than being buried in Settings. New `trash` table (see DATABASE_SCHEMA.md for the payload shape and why this is a snapshot archive rather than a `deleted_at` column) plus the `list_trash` / `restore_trash` / `purge_trash` socket methods
 
 ### Fixed
 - Killing a Docker-published port from the app now works. A macOS app bundle launched by launchd (Finder, login item, tray) inherits `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, which holds no docker binary, so every container kill issued from the UI failed while the same kill from a terminal succeeded. `actions::resolve_docker_bin` now tries `PORTSAGE_DOCKER_BIN`, then `PATH`, then the known install locations (Docker Desktop, Homebrew, OrbStack, distro packages, `~/.docker/bin`)
 
 ### Changed
+- `release_project` and `remove_port` return `{status, trash_id}` instead of the bare string `"ok"`. Clients that only checked for the absence of an error are unaffected
+- The delete confirmation no longer claims the deletion "cannot be undone": it goes to the trash for 30 days
 - `KillOutcome` splits the former catch-all `docker_error` into `docker_cli_missing`, `docker_daemon_down`, `docker_no_container` and `docker_error`, so the message says which of the four happened. Wire-protocol change: a CLI older than this release cannot deserialize the new variants, so upgrade the CLI and the app together
 - CLI exit code 5 (conflict) now also covers restore conflicts worded without the SQLite vocabulary (`already exists`, `already registered`, `overlaps`)
 - Kill messages moved into `src/lib/killOutcome.ts`, shared by `ProjectDetail` and `UnmanagedPortsPanel` instead of being duplicated in both. A partially failed `kill_project` now reports every failing group instead of the first one only

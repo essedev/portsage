@@ -107,11 +107,23 @@ Processo normale: SIGTERM, 2s di grazia, poi SIGKILL. Porta pubblicata da Docker
 
 Il punto non ovvio è trovare il CLI docker: un app bundle avviato da launchd eredita `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, dove docker non c'è, mentre lo stesso binario avviato da terminale eredita la PATH dell'utente e funziona. `actions::resolve_docker_bin` prova `PORTSAGE_DOCKER_BIN`, poi la `PATH`, poi le install location note. Dettaglio nella [versione inglese](ARCHITECTURE.md#killing-a-port).
 
+## Potare i progetti abbandonati
+
+`prune` risponde a "quali di questi non uso più" e li mette da parte. Non cancella mai: l'archiviazione conserva nome, range e porte, e toglie il progetto solo dalla lista.
+
+Il segnale viene dal filesystem, perché il database non ha una storia da cui ricavarlo. `activity.rs` prende il più recente tra l'mtime della directory e quello di `.git/logs/HEAD` (il reflog). Nessuno dei due basta da solo: `.git/HEAD` si muove solo sui checkout, e la directory non vede il lavoro fatto in sottocartelle. Confrontata con `git log -1` su 25 repository reali, la coppia ha sempre dato lo stesso risultato, quindi il reflog si legge per mtime e non si parsa mai.
+
+Due regole rendono la lista sicura: un progetto con una porta in ascolto adesso non è mai candidato, a qualunque età, e un progetto senza path registrato nemmeno, perché il silenzio non è una prova. Il path sparito è segnalato a parte: di solito la cartella è stata spostata, e allora la correzione è `update_project` col path nuovo, non l'archiviazione.
+
+L'archiviazione si annulla in due modi: esplicito (`portsage unarchive`, il bottone nell'intestazione del progetto) e implicito, perché `list_with_status` disarchivia da sé i progetti la cui porta torna in ascolto.
+
+Dettaglio nella [versione inglese](ARCHITECTURE.md#pruning-abandoned-projects).
+
 ## Annullare una cancellazione
 
 `release` e `remove` archiviano quello che cancellano nella tabella `trash` invece di buttarlo; `Database::new` fa la purge di quello che ha più di 30 giorni all'apertura del database. La tabella, la forma del payload e il perché sia un archivio e non una colonna `deleted_at` stanno in [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md).
 
-Interfacce: Impostazioni > Data > Trash nell'app, `portsage trash list|restore|purge` da CLI, e i tool MCP `list_trash` / `restore_trash` (un agent può annullare il proprio `release_project` sbagliato, ma non può fare purge).
+Interfacce: la voce Trash in sidebar, che compare solo quando il cestino contiene qualcosa, `portsage trash list|restore|purge` da CLI, e i tool MCP `list_trash` / `restore_trash` (un agent può annullare il proprio `release_project` sbagliato, ma non può fare purge).
 
 Un progetto ripristinato torna col suo range originale, ed è il punto: il range di un progetto cancellato non viene mai riciclato, quindi i file `.env` e compose che puntano a quelle porte continuano a funzionare.
 

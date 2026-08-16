@@ -22,13 +22,18 @@ CREATE TABLE projects (
     path        TEXT,
     range_start INTEGER NOT NULL,
     range_end   INTEGER NOT NULL,
-    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    archived_at TEXT                                    -- NULL = live
 );
 ```
 
 A project owns a contiguous port range `[range_start, range_end]`. Ranges never overlap - allocation is performed under a single mutex lock (see `Database::create_project` + `compute_next_range`) to defeat the read-modify-write race. The regression test `db.rs::concurrent_create_project_produces_no_overlapping_ranges` covers this.
 
 `name` is unique; `path` is optional and points to a project directory on disk (used by `find_project_by_path` and "Open in Finder/Terminal").
+
+`archived_at` shelves a project: it keeps its name, its range and its ports, and is subject to every constraint as before, it just drops out of the default listing. This is not a soft delete - the row is fully live - so a query that forgets to filter it shows one row too many rather than corrupting anything. Set by `prune` / `portsage archive`, cleared by `portsage unarchive` and automatically by `Database::unarchive_projects_with_active_ports` when one of the project's ports starts listening again.
+
+New columns are added by `db.rs::add_column_if_missing`, because the `CREATE TABLE IF NOT EXISTS` in `migrate` never touches a table that already exists.
 
 ### `ports`
 
@@ -135,6 +140,7 @@ A restore rejects a name collision, an overlapping range, or a missing parent pr
 - **Globally unique port numbers** across projects (the UNIQUE constraint on `ports.port` is the safety net; the application layer also validates that the port falls inside the project's range).
 - **No hard delete cascades from SQL** - all cleanup happens in code so error messages stay consistent.
 - **Hard delete plus an archive, not soft delete.** Projects and ports are deleted for real; the snapshot in `trash` is what makes the deletion reversible for 30 days. The reasoning is under the `trash` table above.
+- **Archiving never frees a range.** An archived project still owns its numbers, and `compute_next_range` still counts it. Shelving is about the list, not about reclaiming ports (regression test: `db.rs::archiving_does_not_free_the_range_for_the_next_project`).
 - **Ranges are never recycled.** A deleted project's range stays free until `MAX(range_end)` moves past it, which is what makes restoring a project with its original range safe: the `.env` and compose files that reference those ports keep working.
 
 ## Migrations

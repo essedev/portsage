@@ -6,6 +6,8 @@ interface UIToastProps {
   message: string | null;
   variant?: ToastVariant;
   onDismiss: () => void;
+  // Optional inline button, e.g. "Undo" after a deletion.
+  action?: { label: string; onClick: () => void } | false | null;
   // Auto-dismiss after this many ms. 0 disables auto-dismiss.
   autoHideMs?: number;
 }
@@ -27,6 +29,7 @@ export function UIToast({
   message,
   variant = "error",
   onDismiss,
+  action,
   autoHideMs = 6000,
 }: UIToastProps) {
   useEffect(() => {
@@ -55,6 +58,17 @@ export function UIToast({
     >
       <span className={`${styles.text} font-medium shrink-0`}>{styles.label}</span>
       <span className="flex-1 break-words">{message}</span>
+      {action && (
+        <button
+          onClick={action.onClick}
+          className="
+            shrink-0 font-medium text-accent-amber
+            hover:underline cursor-pointer transition-colors
+          "
+        >
+          {action.label}
+        </button>
+      )}
       <button
         onClick={onDismiss}
         aria-label="Dismiss"

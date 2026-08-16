@@ -4,7 +4,9 @@ use crate::db::{Database, ForwardExclusion, RemoteBackend};
 use crate::forwards::{ForwardManager, ForwardStatus};
 use crate::paths;
 use crate::scanner::ActivePort;
-use portsage_client::{ConfigSnapshot, KillEntry, RangeBounds, RestoreOutcome, TrashEntry};
+use portsage_client::{
+    ConfigSnapshot, KillEntry, RangeBounds, RestoreOutcome, StaleProject, TrashEntry,
+};
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
 
@@ -34,7 +36,10 @@ pub fn create_project(
 }
 
 #[tauri::command]
-pub fn delete_project(router: State<Arc<BackendRouter>>, name: String) -> Result<(), String> {
+pub fn delete_project(
+    router: State<Arc<BackendRouter>>,
+    name: String,
+) -> Result<Option<i64>, String> {
     let client = router.client().map_err(|e| e.to_string())?;
     client.release_project(&name)
 }
@@ -66,9 +71,28 @@ pub fn remove_port(
     router: State<Arc<BackendRouter>>,
     project_name: String,
     service: String,
-) -> Result<(), String> {
+) -> Result<Option<i64>, String> {
     let client = router.client().map_err(|e| e.to_string())?;
     client.remove_port(&project_name, &service)
+}
+
+#[tauri::command]
+pub fn list_stale(
+    router: State<Arc<BackendRouter>>,
+    days: Option<i64>,
+) -> Result<Vec<StaleProject>, String> {
+    let client = router.client().map_err(|e| e.to_string())?;
+    client.list_stale(days)
+}
+
+#[tauri::command]
+pub fn set_project_archived(
+    router: State<Arc<BackendRouter>>,
+    name: String,
+    archived: bool,
+) -> Result<ProjectStatus, String> {
+    let client = router.client().map_err(|e| e.to_string())?;
+    client.set_project_archived(&name, archived)
 }
 
 // === Trash commands ===
@@ -632,6 +656,7 @@ mod tests {
             "kill_project",
             "open_in_browser",
             "find_project_by_path",
+            "list_stale",
             "list_trash",
             "restore_trash",
         ] {

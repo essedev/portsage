@@ -13,6 +13,10 @@ pub struct Project {
     pub range_start: i64,
     pub range_end: i64,
     pub created_at: String,
+    /// Set when the project has been shelved: it keeps its range and ports
+    /// and stays a first-class row (the name is still taken, the range is
+    /// still reserved), it just drops out of the main list.
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -122,13 +126,15 @@ fn parse_trash_kind(raw: &str) -> TrashKind {
     }
 }
 
+/// Writes the snapshot row and returns its id, so the caller can offer an
+/// immediate undo instead of making the user go find it in the trash.
 fn insert_trash(
     tx: &rusqlite::Transaction<'_>,
     kind: TrashKind,
     label: &str,
     detail: &str,
     payload: &TrashPayload,
-) -> Result<()> {
+) -> Result<i64> {
     let json = serde_json::to_string(payload)
         .map_err(|e| constraint_err(format!("could not archive deletion: {e}")))?;
     tx.execute(
@@ -142,7 +148,7 @@ fn insert_trash(
             TRASH_PAYLOAD_VERSION
         ],
     )?;
-    Ok(())
+    Ok(tx.last_insert_rowid())
 }
 
 fn port_is_taken(tx: &rusqlite::Transaction<'_>, port: i64) -> Result<bool> {
@@ -152,6 +158,28 @@ fn port_is_taken(tx: &rusqlite::Transaction<'_>, port: i64) -> Result<bool> {
         })
         .optional()?;
     Ok(existing.is_some())
+}
+
+/// Add a column when it is not already there. `CREATE TABLE IF NOT EXISTS`
+/// leaves existing tables untouched, so this is how a column reaches a
+/// database created by an older version.
+fn add_column_if_missing(conn: &Connection, table: &str, column: &str, decl: &str) -> Result<()> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let existing: Vec<String> = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>>>()?;
+    drop(stmt);
+    if existing.iter().any(|c| c == column) {
+        return Ok(());
+    }
+    conn.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"))?;
+    Ok(())
+}
+
+/// SQLite's own `datetime('now')`, so archived_at and created_at are written
+/// in the same format by the same clock.
+fn now_string(conn: &Connection) -> Result<String> {
+    conn.query_row("SELECT datetime('now')", [], |row| row.get(0))
 }
 
 fn constraint_err(msg: impl Into<String>) -> rusqlite::Error {
@@ -308,6 +336,10 @@ impl Database {
                 deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
             );",
         )?;
+        // Additive columns for databases created before the column existed.
+        // `CREATE TABLE IF NOT EXISTS` above never alters an existing table,
+        // so every new column has to come through here.
+        add_column_if_missing(&conn, "projects", "archived_at", "TEXT")?;
         Ok(())
     }
 
@@ -379,7 +411,7 @@ impl Database {
         )?;
         let id = conn.last_insert_rowid();
         conn.query_row(
-            "SELECT id, name, path, range_start, range_end, created_at \
+            "SELECT id, name, path, range_start, range_end, created_at, archived_at \
              FROM projects WHERE id = ?1",
             params![id],
             |row| {
@@ -390,6 +422,7 @@ impl Database {
                     range_start: row.get(3)?,
                     range_end: row.get(4)?,
                     created_at: row.get(5)?,
+                    archived_at: row.get(6)?,
                 })
             },
         )
@@ -479,7 +512,7 @@ impl Database {
         )?;
 
         conn.query_row(
-            "SELECT id, name, path, range_start, range_end, created_at \
+            "SELECT id, name, path, range_start, range_end, created_at, archived_at \
              FROM projects WHERE id = ?1",
             params![id],
             |row| {
@@ -490,15 +523,87 @@ impl Database {
                     range_start: row.get(3)?,
                     range_end: row.get(4)?,
                     created_at: row.get(5)?,
+                    archived_at: row.get(6)?,
                 })
             },
         )
     }
 
+    /// Shelve a project: it keeps its range, its ports and its name, and
+    /// only drops out of the main list. Distinct from `delete_project`,
+    /// which removes it and puts a snapshot in the trash.
+    pub fn set_project_archived(&self, name: &str, archived: bool) -> Result<Project> {
+        let conn = self.conn();
+        let value: Option<String> = if archived {
+            Some(now_string(&conn)?)
+        } else {
+            None
+        };
+        let changed = conn.execute(
+            "UPDATE projects SET archived_at = ?1 WHERE name = ?2",
+            params![value, name],
+        )?;
+        if changed == 0 {
+            return Err(not_found_err(format!("project '{name}' not found")));
+        }
+        conn.query_row(
+            "SELECT id, name, path, range_start, range_end, created_at, archived_at \
+             FROM projects WHERE name = ?1",
+            params![name],
+            |row| {
+                Ok(Project {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    path: row.get(2)?,
+                    range_start: row.get(3)?,
+                    range_end: row.get(4)?,
+                    created_at: row.get(5)?,
+                    archived_at: row.get(6)?,
+                })
+            },
+        )
+    }
+
+    /// Un-archive every archived project that currently owns one of
+    /// `active_ports`, and return their names.
+    ///
+    /// Something listening on a project's port is the strongest possible
+    /// signal that it is back in use, and an "archived but running" row is a
+    /// state the user would have to fix by hand. Called from the status
+    /// enrichment path, so it self-heals on the next refresh.
+    pub fn unarchive_projects_with_active_ports(
+        &self,
+        active_ports: &[i64],
+    ) -> Result<Vec<String>> {
+        if active_ports.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.conn();
+        let placeholders = vec!["?"; active_ports.len()].join(",");
+        let sql = format!(
+            "SELECT DISTINCT projects.name FROM projects \
+             JOIN ports ON ports.project_id = projects.id \
+             WHERE projects.archived_at IS NOT NULL AND ports.port IN ({placeholders})"
+        );
+        let params = rusqlite::params_from_iter(active_ports.iter());
+        let mut stmt = conn.prepare(&sql)?;
+        let names: Vec<String> = stmt
+            .query_map(params, |row| row.get(0))?
+            .collect::<Result<Vec<_>>>()?;
+        drop(stmt);
+        for name in &names {
+            conn.execute(
+                "UPDATE projects SET archived_at = NULL WHERE name = ?1",
+                params![name],
+            )?;
+        }
+        Ok(names)
+    }
+
     /// Delete a project and its ports, archiving both in the trash first.
     /// Snapshot and delete share one transaction so the archive can never be
     /// skipped by a caller or lost to a crash between the two writes.
-    pub fn delete_project(&self, id: i64) -> Result<()> {
+    pub fn delete_project(&self, id: i64) -> Result<Option<i64>> {
         let mut guard = self.conn();
         let tx = guard.transaction()?;
 
@@ -520,7 +625,7 @@ impl Database {
             .optional()?;
         // Deleting an already-absent project stays a no-op, as before.
         let Some((name, path, range_start, range_end, created_at)) = project else {
-            return Ok(());
+            return Ok(None);
         };
 
         let mut stmt = tx.prepare(
@@ -552,18 +657,18 @@ impl Database {
             created_at,
             ports,
         };
-        insert_trash(&tx, TrashKind::Project, &name, &detail, &payload)?;
+        let trash_id = insert_trash(&tx, TrashKind::Project, &name, &detail, &payload)?;
 
         tx.execute("DELETE FROM ports WHERE project_id = ?1", params![id])?;
         tx.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
         tx.commit()?;
-        Ok(())
+        Ok(Some(trash_id))
     }
 
     pub fn list_projects(&self) -> Result<Vec<ProjectWithPorts>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT id, name, path, range_start, range_end, created_at \
+            "SELECT id, name, path, range_start, range_end, created_at, archived_at \
              FROM projects ORDER BY range_start",
         )?;
         let projects: Vec<Project> = stmt
@@ -575,6 +680,7 @@ impl Database {
                     range_start: row.get(3)?,
                     range_end: row.get(4)?,
                     created_at: row.get(5)?,
+                    archived_at: row.get(6)?,
                 })
             })?
             .collect::<Result<Vec<_>>>()?;
@@ -644,7 +750,7 @@ impl Database {
 
     /// Remove a single port, archiving it in the trash first. Same
     /// transaction as `delete_project` for the same reason.
-    pub fn remove_port(&self, id: i64) -> Result<()> {
+    pub fn remove_port(&self, id: i64) -> Result<Option<i64>> {
         let mut guard = self.conn();
         let tx = guard.transaction()?;
 
@@ -658,7 +764,7 @@ impl Database {
             )
             .optional()?;
         let Some((project_name, service, port, created_at)) = row else {
-            return Ok(());
+            return Ok(None);
         };
 
         let payload = TrashPayload::Port {
@@ -667,7 +773,7 @@ impl Database {
             port,
             created_at,
         };
-        insert_trash(
+        let trash_id = insert_trash(
             &tx,
             TrashKind::Port,
             &format!("{project_name} / {service}"),
@@ -677,7 +783,7 @@ impl Database {
 
         tx.execute("DELETE FROM ports WHERE id = ?1", params![id])?;
         tx.commit()?;
-        Ok(())
+        Ok(Some(trash_id))
     }
 
     /// Entries in the trash, newest deletion first.
@@ -1218,6 +1324,84 @@ mod tests {
         let projects = db.list_projects().unwrap();
         assert_eq!(projects[0].ports.len(), 1);
         assert_eq!(projects[0].ports[0].service, "api");
+    }
+
+    // --- archive ---
+
+    #[test]
+    fn archiving_keeps_range_ports_and_name() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", Some("/tmp/alpha")).unwrap();
+        db.add_port(p.id, "vite", p.range_start).unwrap();
+
+        let archived = db.set_project_archived("alpha", true).unwrap();
+        assert!(archived.archived_at.is_some());
+
+        // An archived project is still a first-class row: its range is still
+        // reserved, its ports still registered, its name still taken.
+        let listed = db.list_projects().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].project.range_start, p.range_start);
+        assert_eq!(listed[0].ports.len(), 1);
+        assert!(db.create_project("alpha", None).is_err());
+    }
+
+    #[test]
+    fn archiving_does_not_free_the_range_for_the_next_project() {
+        let db = fresh_db();
+        let a = db.create_project("alpha", None).unwrap();
+        db.set_project_archived("alpha", true).unwrap();
+        let b = db.create_project("bravo", None).unwrap();
+        assert_eq!(b.range_start, a.range_end + 1);
+    }
+
+    #[test]
+    fn unarchiving_clears_the_timestamp() {
+        let db = fresh_db();
+        db.create_project("alpha", None).unwrap();
+        db.set_project_archived("alpha", true).unwrap();
+        let back = db.set_project_archived("alpha", false).unwrap();
+        assert!(back.archived_at.is_none());
+    }
+
+    #[test]
+    fn archiving_an_unknown_project_errors() {
+        let db = fresh_db();
+        let err = db.set_project_archived("ghost", true).unwrap_err();
+        assert!(err.to_string().contains("not found"), "got: {err}");
+    }
+
+    #[test]
+    fn a_listening_port_unarchives_its_project() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", None).unwrap();
+        db.add_port(p.id, "vite", p.range_start).unwrap();
+        db.set_project_archived("alpha", true).unwrap();
+
+        let woken = db
+            .unarchive_projects_with_active_ports(&[p.range_start])
+            .unwrap();
+        assert_eq!(woken, vec!["alpha".to_string()]);
+        assert!(db.list_projects().unwrap()[0].project.archived_at.is_none());
+    }
+
+    #[test]
+    fn unrelated_active_ports_leave_archived_projects_alone() {
+        let db = fresh_db();
+        let p = db.create_project("alpha", None).unwrap();
+        db.add_port(p.id, "vite", p.range_start).unwrap();
+        db.set_project_archived("alpha", true).unwrap();
+
+        assert!(db
+            .unarchive_projects_with_active_ports(&[9999])
+            .unwrap()
+            .is_empty());
+        assert!(db.list_projects().unwrap()[0].project.archived_at.is_some());
+        // An empty scan must not wake anything either.
+        assert!(db
+            .unarchive_projects_with_active_ports(&[])
+            .unwrap()
+            .is_empty());
     }
 
     // --- trash ---

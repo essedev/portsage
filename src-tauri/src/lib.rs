@@ -1,4 +1,7 @@
 mod actions;
+// Filesystem activity signals behind `prune`. Not GUI-gated: the socket
+// exposes `list_stale`, so the headless server answers it too.
+mod activity;
 // `backends` and `forwards` carry the multi-host plumbing - SSH tunnel
 // management, BackendRouter, ForwardManager - which is only consumed by the
 // GUI lane (run() + commands.rs). The headless Linux server does not route
@@ -208,6 +211,8 @@ pub fn run() {
             commands::open_in_browser,
             commands::kill_port,
             commands::kill_project,
+            commands::list_stale,
+            commands::set_project_archived,
             commands::list_trash,
             commands::restore_trash,
             commands::purge_trash,

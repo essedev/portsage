@@ -66,6 +66,9 @@ pub enum Command {
         /// Show only ports that are currently active (listening).
         #[arg(long)]
         active: bool,
+        /// Include archived projects, which are hidden by default.
+        #[arg(long)]
+        archived: bool,
     },
 
     /// Show details for the project the current working directory belongs to.
@@ -160,6 +163,23 @@ pub enum Command {
         #[command(subcommand)]
         action: ConfigAction,
     },
+
+    /// Review projects that look abandoned and shelve them. Shows the list
+    /// and changes nothing unless `--apply` is passed.
+    Prune {
+        /// Days of inactivity before a project is a candidate.
+        #[arg(long, default_value_t = 90)]
+        days: i64,
+        /// Archive every candidate. Without it, this only reports.
+        #[arg(long)]
+        apply: bool,
+    },
+
+    /// Shelve a project: it keeps its range and ports but leaves the list.
+    Archive { name: String },
+
+    /// Bring an archived project back into the list.
+    Unarchive { name: String },
 
     /// Inspect and restore deleted projects and ports (kept 30 days).
     Trash {

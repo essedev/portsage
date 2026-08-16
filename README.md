@@ -94,6 +94,12 @@ portsage kill 4000                         # SIGTERM with 2s grace, then SIGKILL
 portsage kill-project --here               # kill every active port in the cwd project, in parallel
 portsage open 4000                         # open http://localhost:4000 in the default browser
 
+portsage prune                             # projects whose folder is gone or long idle (reports only)
+portsage prune --days 60 --apply           # archive them: range and ports kept, list stays clean
+portsage archive <name>                    # shelve one project
+portsage unarchive <name>                  # bring it back
+portsage list --archived                   # include shelved projects in the listing
+
 portsage trash list                        # deleted projects / ports, restorable for 30 days
 portsage trash restore 3                   # put an entry back with its original range
 portsage trash purge 3 | --all             # drop for good (asks to confirm; -y)
