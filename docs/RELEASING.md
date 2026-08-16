@@ -38,8 +38,10 @@ pnpm tauri build
 ```
 
 Output:
-- `src-tauri/target/release/bundle/macos/Portsage.app`
-- `src-tauri/target/release/bundle/dmg/Portsage_<version>_aarch64.dmg`
+- `target/release/bundle/macos/Portsage.app`
+- `target/release/bundle/dmg/Portsage_<version>_aarch64.dmg`
+
+(The bundle lands under the workspace-level `target/`, not `src-tauri/target/`: the Cargo workspace shares one target directory.)
 
 ## Releasing a new version
 
@@ -69,10 +71,13 @@ git push origin main --tags
 
 ```bash
 gh release create vX.Y.Z \
-  src-tauri/target/release/bundle/dmg/Portsage_X.Y.Z_aarch64.dmg \
+  target/release/bundle/dmg/Portsage_X.Y.Z_aarch64.dmg \
   --title "vX.Y.Z" \
   --notes "Description of the changes"
 ```
+
+The macOS DMG is not built in CI (`server-build.yml` only produces the Linux
+tarball on a tag), so this step has to run on a Mac.
 
 ### 5. Update the Homebrew cask
 
